@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maestro/internal/config"
 	"net/http"
-	"os"
 )
 
 type JiraIntegration struct {
@@ -16,15 +16,14 @@ type JiraIntegration struct {
 	Client     *http.Client
 }
 
-func NewJiraApp() (JiraIntegration, error) {
-	if os.Getenv("USERNAME_JIRA") == "" || os.Getenv("TOKEN_JIRA") == "" || os.Getenv("TENANT_NAME_JIRA") == "" {
+func NewJiraApp(cfg *config.Config) (JiraIntegration, error) {
+	if cfg.Jira.UserName == "" || cfg.Jira.Token == "" || cfg.Jira.TenantName == "" {
 		return JiraIntegration{}, errors.New("Variáveis de ambiente não foram carregadas corretamente")
 	}
-
 	app := JiraIntegration{
-		UserName:   os.Getenv("USERNAME_JIRA"),
-		Token:      os.Getenv("TOKEN_JIRA"),
-		TenantName: os.Getenv("TENANT_NAME_JIRA"),
+		UserName:   cfg.Jira.UserName,
+		Token:      cfg.Jira.Token,
+		TenantName: cfg.Jira.TenantName,
 		Client:     &http.Client{},
 	}
 	return app, nil

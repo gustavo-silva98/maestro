@@ -3,17 +3,13 @@ package main
 import (
 	"fmt"
 	"log"
+	"maestro/internal/config"
 	"maestro/internal/integration/jira"
-
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal(err)
-	}
-	api, err := jira.NewJiraApp()
+	config, _ := config.LoadConfig()
+	api, err := jira.NewJiraApp(&config)
 	if err != nil {
 		log.Fatal(err)
 	}
