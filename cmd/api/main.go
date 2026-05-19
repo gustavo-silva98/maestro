@@ -3,46 +3,48 @@ package main
 import (
 	"log"
 	"maestro/internal/config"
-	"maestro/internal/integration/jira"
+	"net/http"
+
+	"github.com/bytedance/sonic"
 )
 
-var testIssue string = "MAE-1"
+// var testIssue string = "MAE-1"
+var ready bool
+
+type Backend struct {
+	Port  string
+	ID    int
+	Ready bool
+}
+
+func (api *Backend) ReadyEndpoint(w http.ResponseWriter, r *http.Request) {
+	api.Ready = true
+	resp := map[string]interface{}{
+		"apiId": api.ID,
+		"ready": api.Ready,
+	}
+	jsonData, err := sonic.Marshal(resp)
+	if err != nil {
+		log.Fatal(err)
+	}
+	w.Write(jsonData)
+}
 
 func main() {
-	config, _ := config.LoadConfig()
-	api, err := jira.NewJiraApp(&config)
-	if err != nil {
-		log.Fatal(err)
+	cfg, _ := config.LoadConfig()
+	api := Backend{
+		Port:  cfg.API.Port,
+		ID:    1,
+		Ready: ready,
 	}
 
-	//resp, _ := api.GetIssue("MAE-1")
-	//fmt.Println(resp)
+	router := http.NewServeMux()
+	router.HandleFunc("/ready", api.ReadyEndpoint)
 
-	accountId, err := api.SearchUserQuery(config.Jira.UserName)
-	if err != nil {
-		log.Fatal(err)
+	server := &http.Server{
+		Addr:    ":" + api.Port,
+		Handler: router,
 	}
-	assign, err := api.AssignUser(testIssue, accountId)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if !assign {
-		log.Fatal("ERRO: Chamado não foi atribuído ao usuário")
-	}
-	transitions, err := api.GetIssueTransitions(testIssue)
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, val := range transitions.Transitions {
-		if val.To.StatusCategory.Key == config.Jira.StatusAllowed.InitialStatus {
-			do, err := api.DoTransition(testIssue, val.ID)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if !do {
-				log.Fatal("ERRO: Transição não foi concluída")
-			}
-			break
-		}
-	}
+	log.Printf("Server interno up : ID %v", api.ID)
+	log.Fatal(server.ListenAndServe())
 }

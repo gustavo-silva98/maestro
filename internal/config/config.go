@@ -13,6 +13,7 @@ type Config struct {
 	API struct {
 		Name      string `mapstructure:"name"`
 		Namespace string `mapstructure:"namespace"`
+		Port      string `mapstructure:"port"`
 	} `mapstructure:"api"`
 	Jira struct {
 		Name          string `mapstructure:"name"`
