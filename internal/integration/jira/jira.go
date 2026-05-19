@@ -1,6 +1,7 @@
 package jira
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -108,5 +109,32 @@ func (jira *JiraIntegration) SearchUserQuery(userEmail string) (string, error) {
 		return searchUser[0].AccountID, nil
 	} else {
 		return "", errors.New("Falha ao buscar usuário: Usuário não encontrado.")
+	}
+}
+func (jira *JiraIntegration) AssignUser(issueId string, accountId string) (bool, error) {
+	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v/assignee", jira.TenantName, issueId)
+
+	data := map[string]string{"accountId": accountId}
+	body, err := json.Marshal(data)
+	if err != nil {
+		return false, fmt.Errorf("Falha ao atrelar usuário: %v", err)
+	}
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(body))
+	if err != nil {
+		return false, fmt.Errorf("Falha ao atrelar usuário: %v", err)
+	}
+	req.SetBasicAuth(jira.UserName, jira.Token)
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := jira.Client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("Falha ao atrelar usuário: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 204 {
+		return true, nil
+	} else {
+		return false, nil
 	}
 }
