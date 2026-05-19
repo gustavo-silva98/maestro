@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"maestro/internal/config"
 	"maestro/internal/integration/jira"
@@ -27,5 +26,23 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(assign)
+	if !assign {
+		log.Fatal("ERRO: Chamado não foi atribuído ao usuário")
+	}
+	transitions, err := api.GetIssueTransitions(testIssue)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, val := range transitions.Transitions {
+		if val.To.StatusCategory.Key == config.Jira.StatusAllowed.InitialStatus {
+			do, err := api.DoTransition(testIssue, val.ID)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if !do {
+				log.Fatal("ERRO: Transição não foi concluída")
+			}
+			break
+		}
+	}
 }

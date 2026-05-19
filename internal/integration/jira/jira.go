@@ -30,28 +30,31 @@ func NewJiraApp(cfg *config.Config) (JiraIntegration, error) {
 	return app, nil
 }
 
-func (jira *JiraIntegration) GetIssueTransitions(issueId string) (string, error) {
+func (jira *JiraIntegration) GetIssueTransitions(issueId string) (JiraTransitions, error) {
 	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v/transitions", jira.TenantName, issueId)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", fmt.Errorf("Falha ao buscar transição de issue: %w", err)
+		return JiraTransitions{}, fmt.Errorf("Falha ao buscar transição de issue: %w", err)
 	}
 	req.SetBasicAuth(jira.UserName, jira.Token)
 
 	req.Header.Add("Accept", "application/json")
 	resp, err := jira.Client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("Falha ao buscar transição de issue: %w", err)
+		return JiraTransitions{}, fmt.Errorf("Falha ao buscar transição de issue: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("Falha ao buscar transição de issue: %w", err)
+		return JiraTransitions{}, fmt.Errorf("Falha ao buscar transição de issue: %w", err)
 	}
-	respString := string(body)
-	return respString, nil
+	var transitionsResp JiraTransitions
+	if err = json.Unmarshal(body, &transitionsResp); err != nil {
+		return JiraTransitions{}, fmt.Errorf("Falha ao buscar transição de issue: %w", err)
+	}
+	return transitionsResp, nil
 
 }
 
@@ -120,6 +123,34 @@ func (jira *JiraIntegration) AssignUser(issueId string, accountId string) (bool,
 		return false, fmt.Errorf("Falha ao atrelar usuário: %v", err)
 	}
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(body))
+	if err != nil {
+		return false, fmt.Errorf("Falha ao atrelar usuário: %v", err)
+	}
+	req.SetBasicAuth(jira.UserName, jira.Token)
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := jira.Client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("Falha ao atrelar usuário: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 204 {
+		return true, nil
+	} else {
+		return false, nil
+	}
+}
+
+func (jira *JiraIntegration) DoTransition(issueId string, transitionId string) (bool, error) {
+	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v/transitions", jira.TenantName, issueId)
+
+	data := map[string]string{"transition": transitionId}
+	body, err := json.Marshal(data)
+	if err != nil {
+		return false, fmt.Errorf("Falha ao atrelar usuário: %v", err)
+	}
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	if err != nil {
 		return false, fmt.Errorf("Falha ao atrelar usuário: %v", err)
 	}
