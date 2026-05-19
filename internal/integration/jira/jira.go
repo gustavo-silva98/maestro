@@ -145,7 +145,8 @@ func (jira *JiraIntegration) AssignUser(issueId string, accountId string) (bool,
 func (jira *JiraIntegration) DoTransition(issueId string, transitionId string) (bool, error) {
 	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v/transitions", jira.TenantName, issueId)
 
-	data := map[string]string{"transition": transitionId}
+	data := map[string]interface{}{
+		"transition": map[string]string{"id": transitionId}}
 	body, err := json.Marshal(data)
 	if err != nil {
 		return false, fmt.Errorf("Falha ao atrelar usuário: %v", err)
