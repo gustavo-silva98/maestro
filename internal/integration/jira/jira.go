@@ -1,10 +1,10 @@
 package jira
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"maestro/internal/config"
 	"net/http"
 )
@@ -29,27 +29,84 @@ func NewJiraApp(cfg *config.Config) (JiraIntegration, error) {
 	return app, nil
 }
 
-func (jira *JiraIntegration) GetIssue(issueId string) (string, error) {
-	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v", jira.TenantName, issueId)
+func (jira *JiraIntegration) GetIssueTransitions(issueId string) (string, error) {
+	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v/transitions", jira.TenantName, issueId)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Fatal(err)
+		return "", fmt.Errorf("Falha ao buscar transição de issue: %w", err)
 	}
 	req.SetBasicAuth(jira.UserName, jira.Token)
 
 	req.Header.Add("Accept", "application/json")
 	resp, err := jira.Client.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		return "", fmt.Errorf("Falha ao buscar transição de issue: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Falha ao buscar transição de issue: %w", err)
 	}
 	respString := string(body)
 	return respString, nil
 
+}
+
+func (jira *JiraIntegration) GetIssue(issueId string) (string, error) {
+	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v", jira.TenantName, issueId)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("Falha ao buscar issue: %w", err)
+	}
+	req.SetBasicAuth(jira.UserName, jira.Token)
+
+	req.Header.Add("Accept", "application/json")
+	resp, err := jira.Client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("Falha ao buscar issue: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("Falha ao buscar issue: %w", err)
+	}
+	respString := string(body)
+	return respString, nil
+
+}
+
+func (jira *JiraIntegration) SearchUserQuery(userEmail string) (string, error) {
+	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/user/search?query=%v", jira.TenantName, userEmail)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("Falha ao buscar usuário: %w", err)
+	}
+	req.SetBasicAuth(jira.UserName, jira.Token)
+
+	req.Header.Add("Accept", "application/json")
+	resp, err := jira.Client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("Falha ao buscar usuário: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var searchUser JiraSearchUser
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("Falha ao buscar usuário: %w", err)
+	}
+	err = json.Unmarshal(body, &searchUser)
+	if err != nil {
+		return "", err
+	}
+	if len(searchUser) > 0 {
+		return searchUser[0].AccountID, nil
+	} else {
+		return "", errors.New("Falha ao buscar usuário: Usuário não encontrado.")
+	}
 }

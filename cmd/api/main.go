@@ -14,6 +14,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	resp, _ := api.GetIssue("MAE-1")
-	fmt.Println(resp)
+	//resp, _ := api.GetIssue("MAE-1")
+	//fmt.Println(resp)
+
+	user, err := api.SearchUserQuery(config.Jira.UserName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(user)
 }
