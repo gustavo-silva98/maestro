@@ -5,7 +5,6 @@ import (
 	"maestro/internal/config"
 	"maestro/internal/integration/jira"
 	"net/http"
-	"net/url"
 
 	"github.com/bytedance/sonic"
 )
@@ -35,11 +34,9 @@ func (api *Backend) ReadyEndpoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
-	urlParse, err := url.Parse(r.URL.String())
-	if err != nil {
-		log.Fatalf("Erro ao parsear url: %v", err)
-	}
-	issue := urlParse.Query().Get("issue")
+	var webhook_body jira.JiraWebhookBody
+	err := sonic.ConfigDefault.NewDecoder(r.Body).Decode(webhook_body)
+	issue := webhook_body.Issue.Key
 	if issue != "" {
 		w.WriteHeader(http.StatusBadRequest)
 	}
