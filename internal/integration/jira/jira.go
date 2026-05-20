@@ -170,3 +170,30 @@ func (jira *JiraIntegration) DoTransition(issueId string, transitionId string) (
 		return false, nil
 	}
 }
+
+func (jira *JiraIntegration) Comment(issueId string, commentText string) error {
+	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v/comment", jira.TenantName, issueId)
+	data := map[string]string{"body": commentText}
+	body, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(jira.UserName, jira.Token)
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := jira.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 201 {
+		return nil
+	} else {
+		return fmt.Errorf("Erro ao comentar. Código HTTP %v", resp.StatusCode)
+	}
+}

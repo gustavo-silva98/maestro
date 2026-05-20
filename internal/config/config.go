@@ -20,6 +20,7 @@ type Config struct {
 		Token         string `mapstructure:"token"`
 		UserName      string `mapstructure:"username"`
 		TenantName    string `mapstructure:"tenant_name"`
+		WebhookSecret string `mapstructure:"webhook_secret"`
 		StatusAllowed struct {
 			InitialStatus string `mapstructure:"initial_status"`
 			FinalStatus   string `mapstructure:"final_status"`

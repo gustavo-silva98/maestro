@@ -8,6 +8,7 @@ jira:
   token: ""
   username: ""
   tenant_name: ""
+  webhook_secret: ""
 
   status_allowed:
     initial_status: "indeterminate"
