@@ -35,20 +35,35 @@ func (api *Backend) ReadyEndpoint(w http.ResponseWriter, r *http.Request) {
 
 func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 	var webhook_body jira.JiraWebhookBody
-	err := sonic.ConfigDefault.NewDecoder(r.Body).Decode(webhook_body)
+	if err := sonic.ConfigDefault.NewDecoder(r.Body).Decode(&webhook_body); err != nil {
+		log.Printf("decode error: %v", err)
+		http.Error(w, "invalid payload", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
 	issue := webhook_body.Issue.Key
-	if issue != "" {
-		w.WriteHeader(http.StatusBadRequest)
+	if issue == "" {
+		http.Error(w, "missing issue key", http.StatusBadRequest)
+		return
+	}
+	accountId, err := api.JiraApi.SearchUserQuery(api.Config.Jira.UserName)
+	if err != nil {
+		http.Error(w, "missing user", http.StatusBadGateway)
+		return
+	}
+	_, err = api.JiraApi.AssignUser(issue, accountId)
+	if err != nil {
+		http.Error(w, "error on assign user", http.StatusBadGateway)
 	}
 	transitions, err := api.JiraApi.GetIssueTransitions(issue)
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, "Error get issueTransition", http.StatusBadGateway)
 	}
 	for _, val := range transitions.Transitions {
-		if val.To.StatusCategory.Key == api.Config.Jira.StatusAllowed.InitialStatus {
+		if val.To.Name == api.Config.Jira.StatusAllowed.InitialStatus {
 			transitionProcess, err := api.JiraApi.DoTransition(issue, val.ID)
 			if err != nil {
-				log.Fatal(err)
+				http.Error(w, "Error transitioning issue In Progress", http.StatusBadGateway)
 			}
 			if transitionProcess {
 				api.JiraApi.Comment(issue, "Transição feita: Em progresso.")
@@ -58,13 +73,13 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 	}
 	transitions, err = api.JiraApi.GetIssueTransitions(issue)
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, "Error get issueTransition", http.StatusBadGateway)
 	}
 	for _, val := range transitions.Transitions {
-		if val.To.StatusCategory.Key == api.Config.Jira.StatusAllowed.FinalStatus {
+		if val.To.Name == api.Config.Jira.StatusAllowed.FinalStatus {
 			transitionProcess, err := api.JiraApi.DoTransition(issue, val.ID)
 			if err != nil {
-				log.Fatalf("ERRO AO TRANSICIONAR DONE: %v", err)
+				http.Error(w, "Error transitioning issue Done", http.StatusBadGateway)
 			}
 			if transitionProcess {
 				api.JiraApi.Comment(issue, "Transição feita: Done.")

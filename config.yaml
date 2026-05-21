@@ -11,5 +11,5 @@ jira:
   webhook_secret: ""
 
   status_allowed:
-    initial_status: "indeterminate"
-    final_status: "done"
+    initial_status: "Work in progress"
+    final_status: "Concluído"
