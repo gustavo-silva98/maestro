@@ -1,10 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
 	"log"
 	"maestro/internal/config"
 	"maestro/internal/integration/jira"
 	"net/http"
+	"strings"
 
 	"github.com/bytedance/sonic"
 )
@@ -34,13 +41,36 @@ func (api *Backend) ReadyEndpoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	xhub := strings.Split(r.Header.Get("X-Hub-Signature"), "=")
+	if len(xhub) != 2 {
+		http.Error(w, "Erro ao validar signature webhook", http.StatusBadRequest)
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Falha ao ler body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if !checkHmac(api.Config.Jira.WebhookSecret, xhub[1], body) {
+		log.Println("Autenticação do Webhook falhou")
+		http.Error(w, "Autenticação do Webhook falhou!", http.StatusBadRequest)
+		return
+	} else {
+		log.Println("HMAC Signature validado!")
+	}
+
 	var webhook_body jira.JiraWebhookBody
+	r.Body = io.NopCloser(bytes.NewReader(body))
 	if err := sonic.ConfigDefault.NewDecoder(r.Body).Decode(&webhook_body); err != nil {
 		log.Printf("decode error: %v", err)
 		http.Error(w, "invalid payload", http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+	log.Printf("Requisição recebida - Issue %v", webhook_body.Issue.Key)
+
 	issue := webhook_body.Issue.Key
 	if issue == "" {
 		http.Error(w, "missing issue key", http.StatusBadRequest)
@@ -54,16 +84,19 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 	_, err = api.JiraApi.AssignUser(issue, accountId)
 	if err != nil {
 		http.Error(w, "error on assign user", http.StatusBadGateway)
+		return
 	}
 	transitions, err := api.JiraApi.GetIssueTransitions(issue)
 	if err != nil {
 		http.Error(w, "Error get issueTransition", http.StatusBadGateway)
+		return
 	}
 	for _, val := range transitions.Transitions {
 		if val.To.Name == api.Config.Jira.StatusAllowed.InitialStatus {
 			transitionProcess, err := api.JiraApi.DoTransition(issue, val.ID)
 			if err != nil {
 				http.Error(w, "Error transitioning issue In Progress", http.StatusBadGateway)
+				return
 			}
 			if transitionProcess {
 				api.JiraApi.Comment(issue, "Transição feita: Em progresso.")
@@ -74,12 +107,14 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 	transitions, err = api.JiraApi.GetIssueTransitions(issue)
 	if err != nil {
 		http.Error(w, "Error get issueTransition", http.StatusBadGateway)
+		return
 	}
 	for _, val := range transitions.Transitions {
 		if val.To.Name == api.Config.Jira.StatusAllowed.FinalStatus {
 			transitionProcess, err := api.JiraApi.DoTransition(issue, val.ID)
 			if err != nil {
 				http.Error(w, "Error transitioning issue Done", http.StatusBadGateway)
+				return
 			}
 			if transitionProcess {
 				api.JiraApi.Comment(issue, "Transição feita: Done.")
@@ -88,6 +123,18 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func checkHmac(secret, received string, data []byte) bool {
+	hash := hmac.New(sha256.New, []byte(secret))
+	hash.Write([]byte(data))
+	expected := hash.Sum(nil)
+
+	receivedHex, err := hex.DecodeString(received)
+	if err != nil {
+		return false
+	}
+	return hmac.Equal(expected, []byte(receivedHex))
 }
 
 func main() {
