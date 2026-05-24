@@ -14,6 +14,7 @@ type JiraIntegration struct {
 	UserName   string
 	Token      string
 	TenantName string
+	BaseUrl    string
 	Client     *http.Client
 }
 
@@ -25,13 +26,14 @@ func NewJiraApp(cfg *config.Config) (JiraIntegration, error) {
 		UserName:   cfg.Jira.UserName,
 		Token:      cfg.Jira.Token,
 		TenantName: cfg.Jira.TenantName,
+		BaseUrl:    fmt.Sprintf("https://%s.atlassian.net", cfg.Jira.TenantName),
 		Client:     &http.Client{},
 	}
 	return app, nil
 }
 
 func (jira *JiraIntegration) GetIssueTransitions(issueId string) (JiraTransitions, error) {
-	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v/transitions", jira.TenantName, issueId)
+	url := fmt.Sprintf("https://%v/rest/api/2/issue/%v/transitions", jira.BaseUrl, issueId)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -59,7 +61,7 @@ func (jira *JiraIntegration) GetIssueTransitions(issueId string) (JiraTransition
 }
 
 func (jira *JiraIntegration) GetIssue(issueId string) (string, error) {
-	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v", jira.TenantName, issueId)
+	url := fmt.Sprintf("https://%v/rest/api/2/issue/%v", jira.BaseUrl, issueId)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("Falha ao buscar issue: %w", err)
@@ -83,7 +85,7 @@ func (jira *JiraIntegration) GetIssue(issueId string) (string, error) {
 }
 
 func (jira *JiraIntegration) SearchUserQuery(userEmail string) (string, error) {
-	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/user/search?query=%v", jira.TenantName, userEmail)
+	url := fmt.Sprintf("%v/rest/api/2/user/search?query=%v", jira.BaseUrl, userEmail)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -115,7 +117,7 @@ func (jira *JiraIntegration) SearchUserQuery(userEmail string) (string, error) {
 	}
 }
 func (jira *JiraIntegration) AssignUser(issueId string, accountId string) (bool, error) {
-	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v/assignee", jira.TenantName, issueId)
+	url := fmt.Sprintf("%v/rest/api/2/issue/%v/assignee", jira.BaseUrl, issueId)
 
 	data := map[string]string{"accountId": accountId}
 	body, err := json.Marshal(data)
@@ -143,7 +145,7 @@ func (jira *JiraIntegration) AssignUser(issueId string, accountId string) (bool,
 }
 
 func (jira *JiraIntegration) DoTransition(issueId string, transitionId string) (bool, error) {
-	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v/transitions", jira.TenantName, issueId)
+	url := fmt.Sprintf("%v/rest/api/2/issue/%v/transitions", jira.BaseUrl, issueId)
 
 	data := map[string]interface{}{
 		"transition": map[string]string{"id": transitionId}}
@@ -172,7 +174,7 @@ func (jira *JiraIntegration) DoTransition(issueId string, transitionId string) (
 }
 
 func (jira *JiraIntegration) Comment(issueId string, commentText string) error {
-	url := fmt.Sprintf("https://%v.atlassian.net/rest/api/2/issue/%v/comment", jira.TenantName, issueId)
+	url := fmt.Sprintf("%v/rest/api/2/issue/%v/comment", jira.BaseUrl, issueId)
 	data := map[string]string{"body": commentText}
 	body, err := json.Marshal(data)
 	if err != nil {
