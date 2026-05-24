@@ -156,3 +156,41 @@ func TestComment(t *testing.T) {
 		}
 	})
 }
+
+func TestGetIssueTransitions(t *testing.T) {
+	t.Run("Get Transition Feitor", func(t *testing.T) {
+		_, client := setupFakeJira(t)
+		transitions, err := client.GetIssueTransitions("MAE-1")
+		if err != nil {
+			t.Fatalf("Não esperava erro. Recebi %v", err)
+		}
+		if len(transitions.Transitions) != 2 {
+			t.Fatalf("Esperava len=2. Recebi len=%v", len(transitions.Transitions))
+		}
+
+		if transitions.Transitions[0].ID != "1" {
+			t.Errorf("esperava id 1, got: %v", transitions.Transitions[0].ID)
+		}
+		if transitions.Transitions[0].To.Name != "indeterminate" {
+			t.Errorf("esperava indeterminate, got: %v", transitions.Transitions[0].To.Name)
+		}
+	})
+
+	t.Run("issue não existe", func(t *testing.T) {
+		fakeJira := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"errorMessages":["Issue does not exist"]}`))
+		}))
+		t.Cleanup(func() { fakeJira.Close() })
+
+		client := &JiraIntegration{
+			BaseUrl: fakeJira.URL,
+			Client:  &http.Client{},
+		}
+
+		_, err := client.GetIssueTransitions("MAE-1")
+		if err != nil {
+			t.Fatalf("Não esperava erro. Recebi =%v", err)
+		}
+	})
+}

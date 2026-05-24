@@ -33,7 +33,7 @@ func NewJiraApp(cfg *config.Config) (JiraIntegration, error) {
 }
 
 func (jira *JiraIntegration) GetIssueTransitions(issueId string) (JiraTransitions, error) {
-	url := fmt.Sprintf("https://%v/rest/api/2/issue/%v/transitions", jira.BaseUrl, issueId)
+	url := fmt.Sprintf("%v/rest/api/2/issue/%v/transitions", jira.BaseUrl, issueId)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -61,7 +61,7 @@ func (jira *JiraIntegration) GetIssueTransitions(issueId string) (JiraTransition
 }
 
 func (jira *JiraIntegration) GetIssue(issueId string) (string, error) {
-	url := fmt.Sprintf("https://%v/rest/api/2/issue/%v", jira.BaseUrl, issueId)
+	url := fmt.Sprintf("%v/rest/api/2/issue/%v", jira.BaseUrl, issueId)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("Falha ao buscar issue: %w", err)
