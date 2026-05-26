@@ -1,6 +1,7 @@
 package jira
 
 import (
+	"maestro/internal/config"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -191,6 +192,40 @@ func TestGetIssueTransitions(t *testing.T) {
 		_, err := client.GetIssueTransitions("MAE-1")
 		if err != nil {
 			t.Fatalf("Não esperava erro. Recebi =%v", err)
+		}
+	})
+}
+
+func TestNewJiraApp(t *testing.T) {
+	t.Run("cfg vazio", func(t *testing.T) {
+		config := config.Config{}
+		config.Jira.Token = ""
+
+		_, err := NewJiraApp(&config)
+		if err == nil {
+			t.Fatal("esperava erro, recebeu nil")
+		}
+	})
+
+	t.Run("cfg ok", func(t *testing.T) {
+		cfg := config.Config{}
+		cfg.Jira.Token = "token"
+		cfg.Jira.UserName = "username"
+		cfg.Jira.TenantName = "tenant-test"
+
+		app, err := NewJiraApp(&cfg)
+		if err != nil {
+			t.Fatalf("esperava nil, recebi erro: %v", err)
+		}
+		if app.UserName != "username" {
+			t.Fatalf("Esperava username. Recebido: %v", app.UserName)
+		}
+		if app.TenantName != "tenant-test" {
+			t.Fatalf("Esperava tenant-test. Recebido: %v", app.TenantName)
+		}
+
+		if app.Token != "token" {
+			t.Fatalf("Esperava token. Recebido: %v", app.Token)
 		}
 	})
 }

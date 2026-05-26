@@ -60,30 +60,6 @@ func (jira *JiraIntegration) GetIssueTransitions(issueId string) (JiraTransition
 
 }
 
-func (jira *JiraIntegration) GetIssue(issueId string) (string, error) {
-	url := fmt.Sprintf("%v/rest/api/2/issue/%v", jira.BaseUrl, issueId)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", fmt.Errorf("Falha ao buscar issue: %w", err)
-	}
-	req.SetBasicAuth(jira.UserName, jira.Token)
-
-	req.Header.Add("Accept", "application/json")
-	resp, err := jira.Client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("Falha ao buscar issue: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("Falha ao buscar issue: %w", err)
-	}
-	respString := string(body)
-	return respString, nil
-
-}
-
 func (jira *JiraIntegration) SearchUserQuery(userEmail string) (string, error) {
 	url := fmt.Sprintf("%v/rest/api/2/user/search?query=%v", jira.BaseUrl, userEmail)
 
