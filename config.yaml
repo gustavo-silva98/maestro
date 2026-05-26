@@ -1,13 +1,15 @@
 api:
   name: Maestro
   namespace: maestro
+  port: 8080
   
 jira:
   name: JiraIntegration
   token: ""
   username: ""
   tenant_name: ""
+  webhook_secret: ""
 
   status_allowed:
-    initial_status: "indeterminate"
-    final_status: "done"
+    initial_status: "Work in progress"
+    final_status: "Concluído"

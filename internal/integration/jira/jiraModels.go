@@ -30,3 +30,9 @@ type JiraTransitions struct {
 		IsLooped      bool `json:"isLooped"`
 	} `json:"transitions"`
 }
+
+type JiraWebhookBody struct {
+	Issue struct {
+		Key string `json:"key"`
+	} `json:"issue"`
+}

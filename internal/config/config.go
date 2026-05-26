@@ -13,12 +13,14 @@ type Config struct {
 	API struct {
 		Name      string `mapstructure:"name"`
 		Namespace string `mapstructure:"namespace"`
+		Port      string `mapstructure:"port"`
 	} `mapstructure:"api"`
 	Jira struct {
 		Name          string `mapstructure:"name"`
 		Token         string `mapstructure:"token"`
 		UserName      string `mapstructure:"username"`
 		TenantName    string `mapstructure:"tenant_name"`
+		WebhookSecret string `mapstructure:"webhook_secret"`
 		StatusAllowed struct {
 			InitialStatus string `mapstructure:"initial_status"`
 			FinalStatus   string `mapstructure:"final_status"`
