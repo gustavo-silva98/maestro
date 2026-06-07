@@ -15,7 +15,42 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	/*
+			cwd, err := os.Getwd()
+			if err != nil {
+				log.Fatal(err)
+			}
+			inputFile := fmt.Sprintf("%s/scripts/football/input.csv:/app/input.csv", cwd)
+			outputDir := fmt.Sprintf("%s/scripts/football/output:/app/Prints", cwd)
+
+			cmd := exec.Command("docker", "run", "--rm", "-v", inputFile, "-v", outputDir, "football-rpa")
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				log.Fatalf("Erro ao rodar container %v\nOutput: %s", err, string(out))
+			}
+
+		jiraApi, err := jira.NewJiraApp(&cfg)
+		oi, err := jiraApi.GetIssue("MAE-19")
+		if err != nil {
+			log.Println(err)
+		}
+		attachment, err := jiraApi.GetAttachmentContent(oi.Fields.JiraAttachment[0].ID)
+		if err != nil {
+			log.Println(err)
+		}
+		os.WriteFile("inputReceived.csv", attachment, 0644)
+		if err := jiraApi.AddAttachment("MAE-19", "inputReceived.csv"); err != nil {
+			log.Printf("erro ao colocar anexo %v", err)
+		}
+		comment := fmt.Sprintf("Csv Recebido \n\n!%s!\n\n", "inputReceived.csv")
+		if err := jiraApi.Comment("MAE-19", comment); err != nil {
+			log.Printf("erro ao comentar anexo %v", err)
+		}
+	*/
 	jiraApi, err := jira.NewJiraApp(&cfg)
+	if err != nil {
+		log.Println(err)
+	}
 	api := handlers.Backend{
 		Port:    cfg.API.Port,
 		ID:      1,

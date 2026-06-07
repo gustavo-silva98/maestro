@@ -36,3 +36,15 @@ type JiraWebhookBody struct {
 		Key string `json:"key"`
 	} `json:"issue"`
 }
+
+type JiraAttachment struct {
+	ID       string `json:"id"`
+	Filename string `json:"filename"`
+}
+
+type JiraIssue struct {
+	ID     string `json:"id"`
+	Fields struct {
+		JiraAttachment []JiraAttachment `json:"attachment"`
+	} `json:"fields"`
+}

@@ -13,6 +13,5 @@ RUN pip install selenium pillow pandas webdriver-manager pyscreenshot
 ENV DISPLAY=:99
 
 COPY football.py .
-COPY input.csv .
 
 CMD ["bash", "-c", "Xvfb :99 -screen 0 1280x720x24 & sleep 1 && python football.py"]
