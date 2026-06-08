@@ -13,3 +13,10 @@ jira:
   status_allowed:
     initial_status: "Work in progress"
     final_status: "Concluído"
+
+database:
+  name: database
+  user: ""
+  password: ""
+  db: ""
+  url: ""

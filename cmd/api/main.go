@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"maestro/internal/config"
 	"maestro/internal/handlers"
 	"maestro/internal/integration/jira"
+	"maestro/internal/repository"
 	"net/http"
 )
 
@@ -47,6 +49,16 @@ func main() {
 			log.Printf("erro ao comentar anexo %v", err)
 		}
 	*/
+	ctx := context.Background()
+
+	db, err := repository.NewPostgres(ctx, cfg.DB.URL)
+	if err != nil {
+		log.Println(err)
+	}
+	if err := db.CreateTables(ctx); err != nil {
+		log.Printf("erro ao criar tabelas %v", err)
+	}
+
 	jiraApi, err := jira.NewJiraApp(&cfg)
 	if err != nil {
 		log.Println(err)
@@ -57,6 +69,7 @@ func main() {
 		Ready:   ready,
 		JiraApi: &jiraApi,
 		Config:  &cfg,
+		DB:      db,
 	}
 	router := http.NewServeMux()
 	router.HandleFunc("/ready", api.ReadyEndpoint)

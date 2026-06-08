@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,11 +10,15 @@ import (
 	"io"
 	"log"
 	"maestro/internal/config"
+	"maestro/internal/domain"
 	"maestro/internal/integration/jira"
+	"maestro/internal/repository"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/google/uuid"
 )
 
 type Backend struct {
@@ -22,6 +27,7 @@ type Backend struct {
 	Ready   bool
 	JiraApi *jira.JiraIntegration
 	Config  *config.Config
+	DB      repository.MaestroRepository
 }
 
 func (api *Backend) ReadyEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -73,6 +79,32 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing issue key", http.StatusBadRequest)
 		return
 	}
+	ctx := context.Background()
+	job := domain.Job{
+		ID:          uuid.NewString(),
+		IssueKey:    issue,
+		TentantName: api.Config.Jira.TenantName,
+		Status:      "Pending",
+		CreatedAt:   time.Now().UTC(),
+	}
+	task := domain.Task{
+		ID:        uuid.NewString(),
+		JobID:     job.ID,
+		Status:    "Pending",
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := api.DB.CreateJob(ctx, job); err != nil {
+		log.Printf("erro ao criar Job %v", err)
+	} else {
+		log.Printf("job criado para issue %v - ID: %v", job.IssueKey, job.ID)
+	}
+
+	if err := api.DB.CreateTask(ctx, task); err != nil {
+		log.Printf("erro ao criar task %v", err)
+	} else {
+		log.Printf("task criada para JobId %v", task.JobID)
+	}
 	accountId, err := api.JiraApi.SearchUserQuery(api.Config.Jira.UserName)
 	if err != nil {
 		http.Error(w, "missing user", http.StatusBadGateway)
@@ -88,6 +120,7 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error get issueTransition", http.StatusBadGateway)
 		return
 	}
+
 	for _, val := range transitions.Transitions {
 		if val.To.Name == api.Config.Jira.StatusAllowed.InitialStatus {
 			transitionProcess, err := api.JiraApi.DoTransition(issue, val.ID)

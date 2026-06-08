@@ -26,6 +26,13 @@ type Config struct {
 			FinalStatus   string `mapstructure:"final_status"`
 		} `mapstructure:"status_allowed"`
 	} `mapstructure:"jira"`
+	DB struct {
+		Name     string `mapstructure:"name"`
+		User     string `mapstructure:"user"`
+		Password string `mapstructure:"password"`
+		DB       string `mapstructure:"db"`
+		URL      string `mapstructure:"url"`
+	} `mapstructure:"database"`
 }
 
 func LoadConfig() (Config, error) {
