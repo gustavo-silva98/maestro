@@ -24,6 +24,20 @@ services:
       - 8090:80
     depends_on:
       - postgres
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - 3000:3000
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - postgres
+
+
 volumes:
   postgres_data:
   pgadmin-data:
+  grafana_data:
