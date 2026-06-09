@@ -12,6 +12,7 @@ import (
 	"maestro/internal/config"
 	"maestro/internal/domain"
 	"maestro/internal/integration/jira"
+	"maestro/internal/orchestrator"
 	"maestro/internal/repository"
 	"net/http"
 	"strings"
@@ -22,12 +23,13 @@ import (
 )
 
 type Backend struct {
-	Port    string
-	ID      int
-	Ready   bool
-	JiraApi *jira.JiraIntegration
-	Config  *config.Config
-	DB      repository.MaestroRepository
+	Port         string
+	ID           int
+	Ready        bool
+	JiraApi      *jira.JiraIntegration
+	Config       *config.Config
+	DB           repository.MaestroRepository
+	Orchestrator orchestrator.Orchestrator
 }
 
 func (api *Backend) ReadyEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -86,12 +88,16 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 		TentantName: api.Config.Jira.TenantName,
 		Status:      "Pending",
 		CreatedAt:   time.Now().UTC(),
+		FinishedAt:  time.Now().UTC(),
+		JobType:     "Futebol",
 	}
 	task := domain.Task{
-		ID:        uuid.NewString(),
-		JobID:     job.ID,
-		Status:    "Pending",
-		CreatedAt: time.Now().UTC(),
+		ID:         uuid.NewString(),
+		JobID:      job.ID,
+		Status:     "Pending",
+		CreatedAt:  time.Now().UTC(),
+		FinishedAt: time.Now().UTC(),
+		TaskType:   "Pesquisa Futebol",
 	}
 
 	if err := api.DB.CreateJob(ctx, job); err != nil {
@@ -134,7 +140,18 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
+
+	execution := orchestrator.ExecutionResult{
+		JobID:     job.ID,
+		StartedAt: time.Now().UTC(),
+		Job:       job,
+		Task:      task,
+	}
+	log.Println("Iniciando execução de Job")
+	executionResult, err := api.Orchestrator.ExecuteJob(execution)
+	fmt.Println(executionResult)
 	transitions, err = api.JiraApi.GetIssueTransitions(issue)
+
 	if err != nil {
 		http.Error(w, "Error get issueTransition", http.StatusBadGateway)
 		return

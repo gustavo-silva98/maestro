@@ -1,36 +1,29 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"log"
 	"maestro/internal/config"
 	"maestro/internal/handlers"
 	"maestro/internal/integration/jira"
+	"maestro/internal/orchestrator"
 	"maestro/internal/repository"
 	"net/http"
 )
 
 var ready bool
+var stdout bytes.Buffer
+var stderr bytes.Buffer
 
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
+
 	/*
-			cwd, err := os.Getwd()
-			if err != nil {
-				log.Fatal(err)
-			}
-			inputFile := fmt.Sprintf("%s/scripts/football/input.csv:/app/input.csv", cwd)
-			outputDir := fmt.Sprintf("%s/scripts/football/output:/app/Prints", cwd)
-
-			cmd := exec.Command("docker", "run", "--rm", "-v", inputFile, "-v", outputDir, "football-rpa")
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				log.Fatalf("Erro ao rodar container %v\nOutput: %s", err, string(out))
-			}
-
 		jiraApi, err := jira.NewJiraApp(&cfg)
 		oi, err := jiraApi.GetIssue("MAE-19")
 		if err != nil {
@@ -54,6 +47,7 @@ func main() {
 	db, err := repository.NewPostgres(ctx, cfg.DB.URL)
 	if err != nil {
 		log.Println(err)
+		return
 	}
 	if err := db.CreateTables(ctx); err != nil {
 		log.Printf("erro ao criar tabelas %v", err)
@@ -62,14 +56,20 @@ func main() {
 	jiraApi, err := jira.NewJiraApp(&cfg)
 	if err != nil {
 		log.Println(err)
+		return
+	}
+	orch := orchestrator.FootballOrchestrator{
+		Config: &cfg,
+		DB:     db,
 	}
 	api := handlers.Backend{
-		Port:    cfg.API.Port,
-		ID:      1,
-		Ready:   ready,
-		JiraApi: &jiraApi,
-		Config:  &cfg,
-		DB:      db,
+		Port:         cfg.API.Port,
+		ID:           1,
+		Ready:        ready,
+		JiraApi:      &jiraApi,
+		Config:       &cfg,
+		DB:           db,
+		Orchestrator: &orch,
 	}
 	router := http.NewServeMux()
 	router.HandleFunc("/ready", api.ReadyEndpoint)

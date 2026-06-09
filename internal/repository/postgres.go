@@ -32,14 +32,18 @@ func (p *Postgres) CreateTables(ctx context.Context) error {
 		issue_key TEXT NOT NULL,
 		tenant_name TEXT NOT NULL,
 		status TEXT NOT NULL,
-		created_at TIMESTAMPTZ NOT NULL
+		created_at TIMESTAMPTZ NOT NULL,
+		finished_at TIMESTAMPTZ NOT NULL,
+		job_type TEXT NOT NULL
 		);
 
 		CREATE TABLE IF NOT EXISTS tasks (
 		id UUID PRIMARY KEY,
 		job_id UUID NOT NULL REFERENCES jobs(id),
 		status TEXT NOT NULL,
-		created_at TIMESTAMPTZ NOT NULL		
+		created_at TIMESTAMPTZ NOT NULL,
+		finished_at TIMESTAMPTZ NOT NULL,
+		task_type TEXT NOT NULL	
 		)	
 	`)
 
@@ -48,16 +52,50 @@ func (p *Postgres) CreateTables(ctx context.Context) error {
 
 func (p *Postgres) CreateJob(ctx context.Context, job domain.Job) error {
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO jobs (id,issue_key,tenant_name,status,created_at)
-		VALUES ($1,$2,$3,$4,$5)
-	`, job.ID, job.IssueKey, job.TentantName, job.Status, job.CreatedAt)
+		INSERT INTO jobs (id,issue_key,tenant_name,status,created_at, finished_at,job_type)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
+	`, job.ID, job.IssueKey, job.TentantName, job.Status, job.CreatedAt, job.CreatedAt, job.JobType)
 	return err
 }
 
 func (p *Postgres) CreateTask(ctx context.Context, task domain.Task) error {
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO tasks (id,job_id,status,created_at)
-		VALUES ($1,$2,$3,$4)
-	`, task.ID, task.JobID, task.Status, task.CreatedAt)
+		INSERT INTO tasks (id,job_id,status,created_at,finished_at, task_type)
+		VALUES ($1,$2,$3,$4,$5,$6)
+	`, task.ID, task.JobID, task.Status, task.CreatedAt, task.CreatedAt, task.TaskType)
+	return err
+}
+
+func (p *Postgres) SetJobPending(ctx context.Context, job domain.Job) error {
+	_, err := p.pool.Exec(ctx, `
+		UPDATE jobs SET status = $1 WHERE id = $2
+	`, "Pending", job.ID)
+	return err
+}
+
+func (p *Postgres) FinishJob(ctx context.Context, job domain.Job) error {
+	_, err := p.pool.Exec(ctx, `
+	UPDATE jobs SET 
+		status = $1, finished_at = $2
+	WHERE id = $3
+	`, "Finished", job.FinishedAt, job.ID)
+
+	return err
+}
+
+func (p *Postgres) SetTaskPending(ctx context.Context, task domain.Task) error {
+	_, err := p.pool.Exec(ctx, `
+		UPDATE tasks SET status = $1 WHERE id = $2
+	`, "Running", task.ID)
+	return err
+}
+
+func (p *Postgres) FinishTask(ctx context.Context, task domain.Task) error {
+	_, err := p.pool.Exec(ctx, `
+	UPDATE tasks SET 
+		status = $1, finished_at = $2
+	WHERE id = $3
+	`, "Finished", task.FinishedAt, task.ID)
+
 	return err
 }

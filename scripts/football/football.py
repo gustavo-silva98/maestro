@@ -8,6 +8,8 @@ import os
 import time
 import pandas as pd
 import pyscreenshot
+import sys
+import json
 
 def newDriver(driver_exec:str) -> webdriver.Firefox:
     service = Service()
@@ -62,8 +64,24 @@ def main():
         os.mkdir('Prints')
     input = readCSV("input")
     driver = newDriver("chromedriver.exe")
+    tasks = []
     for index, row in enumerate(input.itertuples()):
-        find_player_transfermarkt(driver=driver,player_name=str(row.Atleta))
+        task_result = {}
+        task_result["atleta"] = row.Atleta
+        print(f"Pesquisando usuário {row.Atleta}",file=sys.stderr)
+        if find_player_transfermarkt(driver=driver,player_name=str(row.Atleta)):
+            task_result["success"] = True
+            print(f"Sucesso pesquisa {row.Atleta}",file=sys.stderr)
+        else:
+            task_result["success"] = False
+            print(f"Falha pesquisa {row.Atleta}",file=sys.stderr)
+
+        tasks.append(task_result)
+    
+    result = {
+        "tasks" : tasks
+    }
+    print(json.dumps(result))
     
 
 
