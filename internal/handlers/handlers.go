@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -15,6 +17,8 @@ import (
 	"maestro/internal/orchestrator"
 	"maestro/internal/repository"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -30,6 +34,35 @@ type Backend struct {
 	Config       *config.Config
 	DB           repository.MaestroRepository
 	Orchestrator orchestrator.Orchestrator
+}
+
+type JobStatsResponse struct {
+	TotalJobs     int            `json:"totalJobs"`
+	StatusLast24h map[string]int `json:"statusLast24h"`
+}
+
+func (api *Backend) GetJobStatusCounts(w http.ResponseWriter, r *http.Request) {
+	statusCounts, err := api.DB.GetJobStatusCountsLast24h(r.Context())
+	if err != nil {
+		http.Error(w, "erro ao buscar contagem de status", http.StatusInternalServerError)
+		return
+	}
+
+	totalJobs, err := api.DB.GetTotalJobsCount(r.Context())
+	if err != nil {
+		http.Error(w, "erro ao buscar total de jobs", http.StatusInternalServerError)
+		return
+	}
+
+	response := JobStatsResponse{
+		TotalJobs:     totalJobs,
+		StatusLast24h: statusCounts,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("erro ao serializar resposta de status: %v", err)
+	}
 }
 
 func (api *Backend) ReadyEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -100,17 +133,6 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 		TaskType:   "Pesquisa Futebol",
 	}
 
-	if err := api.DB.CreateJob(ctx, job); err != nil {
-		log.Printf("erro ao criar Job %v", err)
-	} else {
-		log.Printf("job criado para issue %v - ID: %v", job.IssueKey, job.ID)
-	}
-
-	if err := api.DB.CreateTask(ctx, task); err != nil {
-		log.Printf("erro ao criar task %v", err)
-	} else {
-		log.Printf("task criada para JobId %v", task.JobID)
-	}
 	accountId, err := api.JiraApi.SearchUserQuery(api.Config.Jira.UserName)
 	if err != nil {
 		http.Error(w, "missing user", http.StatusBadGateway)
@@ -141,6 +163,39 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	getIssue, err := api.JiraApi.GetIssue(issue)
+	if err != nil {
+		http.Error(w, "Error get Issue", http.StatusBadGateway)
+		return
+	}
+
+	attachment, err := api.JiraApi.GetAttachmentContent(getIssue.Fields.JiraAttachment[0].ID)
+	if err != nil {
+		http.Error(w, "Error get IssueAttachment", http.StatusBadGateway)
+		return
+	}
+	err = os.RemoveAll("scripts/football/output")
+	if err != nil {
+		log.Printf("Erro ao excluir pasta %v", err)
+		return
+	}
+	os.WriteFile("scripts/football/input.csv", attachment, 0644)
+	if err := api.JiraApi.Comment(issue, "Iniciando job"); err != nil {
+		http.Error(w, "Falha ao comentar chamado", http.StatusBadGateway)
+		return
+	}
+	job.SavedMinutes = float64(countLinesFast(attachment) - 1)
+	if err := api.DB.CreateJob(ctx, job); err != nil {
+		log.Printf("erro ao criar Job %v", err)
+	} else {
+		log.Printf("job criado para issue %v - ID: %v", job.IssueKey, job.ID)
+	}
+
+	if err := api.DB.CreateTask(ctx, task); err != nil {
+		log.Printf("erro ao criar task %v", err)
+	} else {
+		log.Printf("task criada para JobId %v", task.JobID)
+	}
 	execution := orchestrator.ExecutionResult{
 		JobID:     job.ID,
 		StartedAt: time.Now().UTC(),
@@ -148,9 +203,27 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 		Task:      task,
 	}
 	log.Println("Iniciando execução de Job")
+	if err := api.DB.SetJobRunning(ctx, job); err != nil {
+		http.Error(w, "erro ao setar job running", http.StatusInternalServerError)
+		return
+	}
 	executionResult, err := api.Orchestrator.ExecuteJob(execution)
 	fmt.Println(executionResult)
 	transitions, err = api.JiraApi.GetIssueTransitions(issue)
+
+	if err := ZipFolder("scripts/football/output", "scripts/football/output.zip"); err != nil {
+		http.Error(w, "Error ziping output", http.StatusBadGateway)
+		return
+	}
+
+	if err := api.JiraApi.AddAttachment(issue, "scripts/football/output.zip"); err != nil {
+		http.Error(w, "Error adding output", http.StatusBadGateway)
+		return
+	}
+	comment := fmt.Sprintf("Job Finalizado. Output: \n\n!%s!\n\n", "output.zip")
+	if err := api.JiraApi.Comment(issue, comment); err != nil {
+		log.Printf("erro ao comentar anexo %v", err)
+	}
 
 	if err != nil {
 		http.Error(w, "Error get issueTransition", http.StatusBadGateway)
@@ -169,6 +242,11 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
+	err = api.DB.FinishJob(ctx, job)
+	if err != nil {
+		http.Error(w, "erro ao finalizar job", http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -182,4 +260,119 @@ func checkHmac(secret, received string, data []byte) bool {
 		return false
 	}
 	return hmac.Equal(expected, []byte(receivedHex))
+}
+
+func ZipFolder(srcDir, destZipPath string) error {
+	// Garante que o diretório de origem existe
+	info, err := os.Stat(srcDir)
+	if err != nil {
+		return fmt.Errorf("erro ao acessar srcDir: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s não é um diretório", srcDir)
+	}
+
+	zipFile, err := os.Create(destZipPath)
+	if err != nil {
+		return fmt.Errorf("erro ao criar arquivo zip: %w", err)
+	}
+	defer zipFile.Close()
+
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	return filepath.Walk(srcDir, func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Caminho relativo dentro do zip (mantém a estrutura de pastas)
+		relPath, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+
+		// Pula a própria raiz
+		if relPath == "." {
+			return nil
+		}
+
+		// Normaliza separadores para "/" (padrão do formato zip)
+		relPath = filepath.ToSlash(relPath)
+
+		if fi.IsDir() {
+			// Cria entrada de diretório (com "/" no final)
+			_, err := zipWriter.Create(relPath + "/")
+			return err
+		}
+
+		// Cria entrada do header preservando metadados (data, permissões)
+		header, err := zip.FileInfoHeader(fi)
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
+		header.Method = zip.Deflate // compressão (use zip.Store para só empacotar sem compactar)
+
+		writer, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+
+		_, err = io.Copy(writer, srcFile)
+		return err
+	})
+}
+
+func (api *Backend) GetJobs(w http.ResponseWriter, r *http.Request) {
+	jobs, err := api.DB.GetJobs(r.Context(), 50)
+	if err != nil {
+		http.Error(w, "erro ao buscar jobs", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(jobs)
+}
+
+func countLinesFast(b []byte) int {
+	if len(b) == 0 {
+		return 0
+	}
+	n := bytes.Count(b, []byte{'\n'})
+	if b[len(b)-1] != '\n' {
+		n++
+	}
+	return n
+}
+
+func (api *Backend) DeleteTables(w http.ResponseWriter, r *http.Request) {
+	if err := api.DB.ClearTables(r.Context()); err != nil {
+		http.Error(w, "erro ao deletar tabelas", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (api *Backend) GetSavedMinutes(w http.ResponseWriter, r *http.Request) {
+	minutes, err := api.DB.GetSavedMinutes(r.Context())
+	if err != nil {
+		http.Error(w, "erro ao consultar tempo economizado", http.StatusInternalServerError)
+		return
+	}
+	resp := map[string]float64{
+		"savedMinutes": minutes,
+	}
+	jsonData, err := sonic.Marshal(resp)
+	if err != nil {
+		http.Error(w, "erro ao serializar resposta", http.StatusInternalServerError)
+		return
+	}
+	w.Write(jsonData)
+	w.WriteHeader(http.StatusOK)
 }

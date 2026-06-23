@@ -34,7 +34,8 @@ func (p *Postgres) CreateTables(ctx context.Context) error {
 		status TEXT NOT NULL,
 		created_at TIMESTAMPTZ NOT NULL,
 		finished_at TIMESTAMPTZ NOT NULL,
-		job_type TEXT NOT NULL
+		job_type TEXT NOT NULL,
+		saved_minutes NUMERIC(10,2) NOT NULL DEFAULT 0
 		);
 
 		CREATE TABLE IF NOT EXISTS tasks (
@@ -52,9 +53,9 @@ func (p *Postgres) CreateTables(ctx context.Context) error {
 
 func (p *Postgres) CreateJob(ctx context.Context, job domain.Job) error {
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO jobs (id,issue_key,tenant_name,status,created_at, finished_at,job_type)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
-	`, job.ID, job.IssueKey, job.TentantName, job.Status, job.CreatedAt, job.CreatedAt, job.JobType)
+		INSERT INTO jobs (id,issue_key,tenant_name,status,created_at, finished_at,job_type,saved_minutes)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+	`, job.ID, job.IssueKey, job.TentantName, job.Status, job.CreatedAt, job.CreatedAt, job.JobType, job.SavedMinutes)
 	return err
 }
 
@@ -73,12 +74,19 @@ func (p *Postgres) SetJobPending(ctx context.Context, job domain.Job) error {
 	return err
 }
 
+func (p *Postgres) SetJobRunning(ctx context.Context, job domain.Job) error {
+	_, err := p.pool.Exec(ctx, `
+		UPDATE jobs SET status = $1 WHERE id = $2
+	`, "Running", job.ID)
+	return err
+}
+
 func (p *Postgres) FinishJob(ctx context.Context, job domain.Job) error {
 	_, err := p.pool.Exec(ctx, `
 	UPDATE jobs SET 
 		status = $1, finished_at = $2
 	WHERE id = $3
-	`, "Finished", job.FinishedAt, job.ID)
+	`, "Success", job.FinishedAt, job.ID)
 
 	return err
 }
@@ -95,7 +103,100 @@ func (p *Postgres) FinishTask(ctx context.Context, task domain.Task) error {
 	UPDATE tasks SET 
 		status = $1, finished_at = $2
 	WHERE id = $3
-	`, "Finished", task.FinishedAt, task.ID)
+	`, "Success", task.FinishedAt, task.ID)
 
 	return err
+}
+
+func (p *Postgres) GetJobs(ctx context.Context, numberRows int) ([]domain.Job, error) {
+	rows, err := p.pool.Query(ctx, `
+	SELECT * FROM jobs ORDER BY created_at DESC LIMIT $1
+	`, numberRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	jobs := make([]domain.Job, 0)
+
+	for rows.Next() {
+		var job domain.Job
+		if err := rows.Scan(
+			&job.ID,
+			&job.IssueKey,
+			&job.TentantName,
+			&job.Status,
+			&job.CreatedAt,
+			&job.FinishedAt,
+			&job.JobType,
+			&job.SavedMinutes,
+		); err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, job)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return jobs, nil
+}
+
+func (p *Postgres) ClearTables(ctx context.Context) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM jobs`)
+	if err != nil {
+		return err
+	}
+	_, err = p.pool.Exec(ctx, `DELETE FROM tasks`)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *Postgres) GetSavedMinutes(ctx context.Context) (float64, error) {
+	var totalMinutes float64
+
+	err := p.pool.QueryRow(ctx, "SELECT COALESCE(SUM(saved_minutes), 0) FROM jobs").Scan(&totalMinutes)
+	if err != nil {
+		return 0, err
+	}
+	return totalMinutes, nil
+
+}
+
+func (p *Postgres) GetJobStatusCountsLast24h(ctx context.Context) (map[string]int, error) {
+	rows, err := p.pool.Query(ctx, `
+        SELECT status, COUNT(*) as count
+        FROM jobs
+        WHERE created_at >= NOW() - INTERVAL '24 hours'
+        GROUP BY status
+    `)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	statusCounts := make(map[string]int)
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, err
+		}
+		statusCounts[status] = count
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return statusCounts, nil
+}
+
+func (p *Postgres) GetTotalJobsCount(ctx context.Context) (int, error) {
+	var total int
+	err := p.pool.QueryRow(ctx, "SELECT COUNT(*) FROM jobs").Scan(&total)
+	if err != nil {
+		return 0, err
+	}
+	return total, nil
 }

@@ -74,6 +74,10 @@ func main() {
 	router := http.NewServeMux()
 	router.HandleFunc("/ready", api.ReadyEndpoint)
 	router.HandleFunc("/test-automation", api.TestAutomation)
+	router.HandleFunc("/get-jobs", api.GetJobs)
+	router.HandleFunc("/delete-table", api.DeleteTables)
+	router.HandleFunc("/get-saved-minute", api.GetSavedMinutes)
+	router.HandleFunc("/status-counts", api.GetJobStatusCounts)
 
 	server := &http.Server{
 		Addr:    ":" + api.Port,
