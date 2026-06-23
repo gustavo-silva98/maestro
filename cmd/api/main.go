@@ -81,7 +81,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    ":" + api.Port,
-		Handler: router,
+		Handler: handlers.EnableCORS(router),
 	}
 	log.Printf("Server interno up : ID %v", api.ID)
 	log.Fatal(server.ListenAndServe())

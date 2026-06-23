@@ -26,6 +26,22 @@ import (
 	"github.com/google/uuid"
 )
 
+func EnableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Hub-Signature")
+
+		// Se for uma requisição pre-flight OPTIONS, apenas retorne
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 type Backend struct {
 	Port         string
 	ID           int
@@ -114,140 +130,157 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing issue key", http.StatusBadRequest)
 		return
 	}
-	ctx := context.Background()
-	job := domain.Job{
-		ID:          uuid.NewString(),
-		IssueKey:    issue,
-		TentantName: api.Config.Jira.TenantName,
-		Status:      "Pending",
-		CreatedAt:   time.Now().UTC(),
-		FinishedAt:  time.Now().UTC(),
-		JobType:     "Futebol",
-	}
-	task := domain.Task{
-		ID:         uuid.NewString(),
-		JobID:      job.ID,
-		Status:     "Pending",
-		CreatedAt:  time.Now().UTC(),
-		FinishedAt: time.Now().UTC(),
-		TaskType:   "Pesquisa Futebol",
-	}
+	w.WriteHeader(http.StatusAccepted)
+	w.Write([]byte("Job recebido e agendado para execução."))
 
-	accountId, err := api.JiraApi.SearchUserQuery(api.Config.Jira.UserName)
-	if err != nil {
-		http.Error(w, "missing user", http.StatusBadGateway)
-		return
-	}
-	_, err = api.JiraApi.AssignUser(issue, accountId)
-	if err != nil {
-		http.Error(w, "error on assign user", http.StatusBadGateway)
-		return
-	}
-	transitions, err := api.JiraApi.GetIssueTransitions(issue)
-	if err != nil {
-		http.Error(w, "Error get issueTransition", http.StatusBadGateway)
-		return
-	}
-
-	for _, val := range transitions.Transitions {
-		if val.To.Name == api.Config.Jira.StatusAllowed.InitialStatus {
-			transitionProcess, err := api.JiraApi.DoTransition(issue, val.ID)
-			if err != nil {
-				http.Error(w, "Error transitioning issue In Progress", http.StatusBadGateway)
-				return
-			}
-			if transitionProcess {
-				api.JiraApi.Comment(issue, "Transição feita: Em progresso.")
-			}
-			break
+	// --- Inicia o processamento em background ---
+	go func() {
+		ctx := context.Background()
+		job := domain.Job{
+			ID:          uuid.NewString(),
+			IssueKey:    issue,
+			TentantName: api.Config.Jira.TenantName,
+			Status:      "Running",
+			CreatedAt:   time.Now().UTC(),
+			FinishedAt:  time.Now().UTC(),
+			JobType:     "Futebol",
 		}
-	}
-
-	getIssue, err := api.JiraApi.GetIssue(issue)
-	if err != nil {
-		http.Error(w, "Error get Issue", http.StatusBadGateway)
-		return
-	}
-
-	attachment, err := api.JiraApi.GetAttachmentContent(getIssue.Fields.JiraAttachment[0].ID)
-	if err != nil {
-		http.Error(w, "Error get IssueAttachment", http.StatusBadGateway)
-		return
-	}
-	err = os.RemoveAll("scripts/football/output")
-	if err != nil {
-		log.Printf("Erro ao excluir pasta %v", err)
-		return
-	}
-	os.WriteFile("scripts/football/input.csv", attachment, 0644)
-	if err := api.JiraApi.Comment(issue, "Iniciando job"); err != nil {
-		http.Error(w, "Falha ao comentar chamado", http.StatusBadGateway)
-		return
-	}
-	job.SavedMinutes = float64(countLinesFast(attachment) - 1)
-	if err := api.DB.CreateJob(ctx, job); err != nil {
-		log.Printf("erro ao criar Job %v", err)
-	} else {
-		log.Printf("job criado para issue %v - ID: %v", job.IssueKey, job.ID)
-	}
-
-	if err := api.DB.CreateTask(ctx, task); err != nil {
-		log.Printf("erro ao criar task %v", err)
-	} else {
-		log.Printf("task criada para JobId %v", task.JobID)
-	}
-	execution := orchestrator.ExecutionResult{
-		JobID:     job.ID,
-		StartedAt: time.Now().UTC(),
-		Job:       job,
-		Task:      task,
-	}
-	log.Println("Iniciando execução de Job")
-	if err := api.DB.SetJobRunning(ctx, job); err != nil {
-		http.Error(w, "erro ao setar job running", http.StatusInternalServerError)
-		return
-	}
-	executionResult, err := api.Orchestrator.ExecuteJob(execution)
-	fmt.Println(executionResult)
-	transitions, err = api.JiraApi.GetIssueTransitions(issue)
-
-	if err := ZipFolder("scripts/football/output", "scripts/football/output.zip"); err != nil {
-		http.Error(w, "Error ziping output", http.StatusBadGateway)
-		return
-	}
-
-	if err := api.JiraApi.AddAttachment(issue, "scripts/football/output.zip"); err != nil {
-		http.Error(w, "Error adding output", http.StatusBadGateway)
-		return
-	}
-	comment := fmt.Sprintf("Job Finalizado. Output: \n\n!%s!\n\n", "output.zip")
-	if err := api.JiraApi.Comment(issue, comment); err != nil {
-		log.Printf("erro ao comentar anexo %v", err)
-	}
-
-	if err != nil {
-		http.Error(w, "Error get issueTransition", http.StatusBadGateway)
-		return
-	}
-	for _, val := range transitions.Transitions {
-		if val.To.Name == api.Config.Jira.StatusAllowed.FinalStatus {
-			transitionProcess, err := api.JiraApi.DoTransition(issue, val.ID)
-			if err != nil {
-				http.Error(w, "Error transitioning issue Done", http.StatusBadGateway)
-				return
-			}
-			if transitionProcess {
-				api.JiraApi.Comment(issue, "Transição feita: Done.")
-			}
-			break
+		task := domain.Task{
+			ID:         uuid.NewString(),
+			JobID:      job.ID,
+			Status:     "Pending",
+			CreatedAt:  time.Now().UTC(),
+			FinishedAt: time.Now().UTC(), // Mantendo como você pediu
+			TaskType:   "Pesquisa Futebol",
 		}
-	}
-	err = api.DB.FinishJob(ctx, job)
-	if err != nil {
-		http.Error(w, "erro ao finalizar job", http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
+
+		accountId, err := api.JiraApi.SearchUserQuery(api.Config.Jira.UserName)
+		if err != nil {
+			log.Printf("ERRO no job %s: missing user: %v", job.ID, err)
+			return
+		}
+		_, err = api.JiraApi.AssignUser(issue, accountId)
+		if err != nil {
+			log.Printf("ERRO no job %s: error on assign user: %v", job.ID, err)
+			return
+		}
+		transitions, err := api.JiraApi.GetIssueTransitions(issue)
+		if err != nil {
+			log.Printf("ERRO no job %s: Error get issueTransition: %v", job.ID, err)
+			return
+		}
+
+		for _, val := range transitions.Transitions {
+			if val.To.Name == api.Config.Jira.StatusAllowed.InitialStatus {
+				transitionProcess, err := api.JiraApi.DoTransition(issue, val.ID)
+				if err != nil {
+					log.Printf("ERRO no job %s: Error transitioning issue In Progress: %v", job.ID, err)
+					return
+				}
+				if transitionProcess {
+					api.JiraApi.Comment(issue, "Transição feita: Em progresso.")
+				}
+				break
+			}
+		}
+
+		getIssue, err := api.JiraApi.GetIssue(issue)
+		if err != nil {
+			log.Printf("ERRO no job %s: Error get Issue: %v", job.ID, err)
+			return
+		}
+
+		attachment, err := api.JiraApi.GetAttachmentContent(getIssue.Fields.JiraAttachment[0].ID)
+		if err != nil {
+			log.Printf("ERRO no job %s: Error get IssueAttachment: %v", job.ID, err)
+			return
+		}
+		err = os.RemoveAll("scripts/football/output")
+		if err != nil {
+			log.Printf("ERRO no job %s: Erro ao excluir pasta %v", job.ID, err)
+			return
+		}
+		os.WriteFile("scripts/football/input.csv", attachment, 0644)
+		if err := api.JiraApi.Comment(issue, "Iniciando job"); err != nil {
+			log.Printf("ERRO no job %s: Falha ao comentar chamado: %v", job.ID, err)
+			return
+		}
+		job.SavedMinutes = float64(countLinesFast(attachment) - 1)
+		if err := api.DB.CreateJob(ctx, job); err != nil {
+			log.Printf("ERRO no job %s: erro ao criar Job %v", job.ID, err)
+		} else {
+			log.Printf("job criado para issue %v - ID: %v", job.IssueKey, job.ID)
+		}
+
+		if err := api.DB.CreateTask(ctx, task); err != nil {
+			log.Printf("ERRO no job %s: erro ao criar task %v", job.ID, err)
+		} else {
+			log.Printf("task criada para JobId %v", task.JobID)
+		}
+
+		execution := orchestrator.ExecutionResult{
+			JobID:     job.ID,
+			StartedAt: time.Now().UTC(),
+			Job:       job,
+			Task:      task,
+		}
+
+		log.Printf("Iniciando execução do Job %s", job.ID)
+		if err := api.DB.SetJobRunning(ctx, job); err != nil {
+			log.Printf("ERRO no job %s: erro ao setar job running: %v", job.ID, err)
+			return
+		}
+
+		// A execução longa acontece aqui
+		_, err = api.Orchestrator.ExecuteJob(execution)
+		if err != nil {
+			log.Printf("ERRO na execução do Job %s: %v", job.ID, err)
+			// Aqui você poderia implementar uma lógica para marcar o job como "Failed"
+			return
+		}
+		log.Printf("Job %s executado com sucesso.", job.ID)
+
+		if err := ZipFolder("scripts/football/output", "scripts/football/output.zip"); err != nil {
+			log.Printf("ERRO no job %s: Error ziping output: %v", job.ID, err)
+			return
+		}
+
+		if err := api.JiraApi.AddAttachment(issue, "scripts/football/output.zip"); err != nil {
+			log.Printf("ERRO no job %s: Error adding output: %v", job.ID, err)
+			return
+		}
+		comment := fmt.Sprintf("Job Finalizado. Output: \n\n!%s!\n\n", "output.zip")
+		if err := api.JiraApi.Comment(issue, comment); err != nil {
+			log.Printf("ERRO no job %s: erro ao comentar anexo %v", job.ID, err)
+		}
+
+		transitions, err = api.JiraApi.GetIssueTransitions(issue)
+		if err != nil {
+			log.Printf("ERRO no job %s: Error get issueTransition on finish: %v", job.ID, err)
+			return
+		}
+		for _, val := range transitions.Transitions {
+			if val.To.Name == api.Config.Jira.StatusAllowed.FinalStatus {
+				transitionProcess, err := api.JiraApi.DoTransition(issue, val.ID)
+				if err != nil {
+					log.Printf("ERRO no job %s: Error transitioning issue Done: %v", job.ID, err)
+					return
+				}
+				if transitionProcess {
+					api.JiraApi.Comment(issue, "Transição feita: Done.")
+				}
+				break
+			}
+		}
+
+		job.FinishedAt = time.Now().UTC()
+		err = api.DB.FinishJob(ctx, job)
+		if err != nil {
+			log.Printf("ERRO no job %s: erro ao finalizar job: %v", job.ID, err)
+			return
+		}
+		log.Printf("Job %s finalizado com sucesso.", job.ID)
+	}() // A `()` no final executa a função anônima
 }
 
 func checkHmac(secret, received string, data []byte) bool {
@@ -374,5 +407,4 @@ func (api *Backend) GetSavedMinutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(jsonData)
-	w.WriteHeader(http.StatusOK)
 }

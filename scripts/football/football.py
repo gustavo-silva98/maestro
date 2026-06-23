@@ -44,6 +44,11 @@ def find_player_transfermarkt(driver:webdriver.Chrome,player_name:str) -> bool:
         if classes.text == player_name:
             classes.click()
             break
+    aceitar_cookie(driver=driver)
+    driver.refresh()
+    aceitar_cookie(driver=driver)
+    driver.execute_script("window.scrollBy(0, 700);")
+
     if driver.save_screenshot(f"Prints/{player_name}.png"):
         return True
     else:

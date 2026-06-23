@@ -70,7 +70,7 @@ func (p *Postgres) CreateTask(ctx context.Context, task domain.Task) error {
 func (p *Postgres) SetJobPending(ctx context.Context, job domain.Job) error {
 	_, err := p.pool.Exec(ctx, `
 		UPDATE jobs SET status = $1 WHERE id = $2
-	`, "Pending", job.ID)
+	`, "Running", job.ID)
 	return err
 }
 
@@ -155,7 +155,7 @@ func (p *Postgres) ClearTables(ctx context.Context) error {
 func (p *Postgres) GetSavedMinutes(ctx context.Context) (float64, error) {
 	var totalMinutes float64
 
-	err := p.pool.QueryRow(ctx, "SELECT COALESCE(SUM(saved_minutes), 0) FROM jobs").Scan(&totalMinutes)
+	err := p.pool.QueryRow(ctx, "SELECT COALESCE(SUM(saved_minutes), 0) FROM jobs WHERE created_at >= NOW() - INTERVAL '24 hours'").Scan(&totalMinutes)
 	if err != nil {
 		return 0, err
 	}
@@ -194,7 +194,7 @@ func (p *Postgres) GetJobStatusCountsLast24h(ctx context.Context) (map[string]in
 
 func (p *Postgres) GetTotalJobsCount(ctx context.Context) (int, error) {
 	var total int
-	err := p.pool.QueryRow(ctx, "SELECT COUNT(*) FROM jobs").Scan(&total)
+	err := p.pool.QueryRow(ctx, "SELECT COUNT(*) FROM jobs WHERE created_at >= NOW() - INTERVAL '24 hours'").Scan(&total)
 	if err != nil {
 		return 0, err
 	}
