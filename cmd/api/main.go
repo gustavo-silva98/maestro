@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"log"
 	"maestro/internal/config"
@@ -13,8 +12,6 @@ import (
 )
 
 var ready bool
-var stdout bytes.Buffer
-var stderr bytes.Buffer
 
 func main() {
 	cfg, err := config.LoadConfig()
@@ -23,25 +20,6 @@ func main() {
 		return
 	}
 
-	/*
-		jiraApi, err := jira.NewJiraApp(&cfg)
-		oi, err := jiraApi.GetIssue("MAE-19")
-		if err != nil {
-			log.Println(err)
-		}
-		attachment, err := jiraApi.GetAttachmentContent(oi.Fields.JiraAttachment[0].ID)
-		if err != nil {
-			log.Println(err)
-		}
-		os.WriteFile("inputReceived.csv", attachment, 0644)
-		if err := jiraApi.AddAttachment("MAE-19", "inputReceived.csv"); err != nil {
-			log.Printf("erro ao colocar anexo %v", err)
-		}
-		comment := fmt.Sprintf("Csv Recebido \n\n!%s!\n\n", "inputReceived.csv")
-		if err := jiraApi.Comment("MAE-19", comment); err != nil {
-			log.Printf("erro ao comentar anexo %v", err)
-		}
-	*/
 	ctx := context.Background()
 
 	db, err := repository.NewPostgres(ctx, cfg.DB.URL)

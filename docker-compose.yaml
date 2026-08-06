@@ -13,31 +13,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  pgadmin:
-    image: dpage/pgadmin4
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${MAESTRO_PGADMIN_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${MAESTRO_DATABASE_PASSWORD}
-    volumes:
-      - pgadmin-data:/var/lib/pgadmin
-    ports:
-      - 8090:80
-    depends_on:
-      - postgres
-
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - 3000:3000
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
-    volumes:
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - postgres
-
 
 volumes:
   postgres_data:
-  pgadmin-data:
-  grafana_data:
