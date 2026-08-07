@@ -37,8 +37,7 @@ func main() {
 		return
 	}
 	orch := orchestrator.FootballOrchestrator{
-		Config: &cfg,
-		DB:     db,
+		DB: db,
 	}
 	api := handlers.Backend{
 		Port:         cfg.API.Port,

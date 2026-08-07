@@ -5,6 +5,8 @@ import (
 	"maestro/internal/domain"
 )
 
+// Refatorar essa interface urgente
+
 type MaestroRepository interface {
 	CreateJob(ctx context.Context, job domain.Job) error
 	SetJobPending(ctx context.Context, job domain.Job) error
@@ -20,4 +22,10 @@ type MaestroRepository interface {
 	GetTotalJobsCount(ctx context.Context) (int, error)
 	//UpdateTask(ctx context.Context, task domain.Task) error
 	//GetPending(ctx context.Context) ([]domain.Job, error)
+}
+
+type JobRepository interface {
+	CreateJob(ctx context.Context, job domain.Job) error
+	SetJobPending(ctx context.Context, job domain.Job) error
+	FinishJob(ctx context.Context, job domain.Job) error
 }

@@ -3,8 +3,8 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"maestro/internal/config"
 	"maestro/internal/domain"
 	"maestro/internal/executor"
 	"maestro/internal/repository"
@@ -30,8 +30,7 @@ type ExecutionResult struct {
 }
 
 type FootballOrchestrator struct {
-	Config   *config.Config
-	DB       repository.MaestroRepository
+	DB       repository.JobRepository
 	Executor executor.Executor
 }
 
@@ -41,6 +40,9 @@ func (f *FootballOrchestrator) ExecuteJob(result ExecutionResult) (ExecutionResu
 		return ExecutionResult{}, err
 	}
 	inputFile, outputDir, err := buildVolumes(result.Job.IssueKey)
+	if err != nil {
+		return ExecutionResult{}, fmt.Errorf("erro ao montar volumes: %w", err)
+	}
 	argsString := []string{"run", "--rm", "-v", inputFile, "-v", outputDir}
 	stdout, stderr, err := f.Executor.Execute(ctx, "docker", argsString)
 
@@ -52,9 +54,9 @@ func (f *FootballOrchestrator) ExecuteJob(result ExecutionResult) (ExecutionResu
 
 	if err != nil {
 		result.ExitCode = 1
-
+		var exitErr *exec.ExitError
 		// Se o processo retornou exit code != 0
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		if errors.As(err, &exitErr) {
 			result.ExitCode = exitErr.ExitCode()
 		}
 		return result, fmt.Errorf(
