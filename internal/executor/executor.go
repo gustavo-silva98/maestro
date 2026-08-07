@@ -5,5 +5,5 @@ import (
 )
 
 type Executor interface {
-	Execute(ctx context.Context, name string, args []string) (stderr []byte, stdout []byte, err error)
+	Execute(ctx context.Context, name string, args []string) (stdout []byte, stderr []byte, err error)
 }

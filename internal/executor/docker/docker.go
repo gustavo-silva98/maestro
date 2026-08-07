@@ -3,8 +3,11 @@ package docker
 import (
 	"bytes"
 	"context"
+	"maestro/internal/executor"
 	"os/exec"
 )
+
+var _ executor.Executor = Docker{}
 
 type Docker struct{}
 
@@ -16,5 +19,5 @@ func (Docker) Execute(ctx context.Context, name string, args []string) ([]byte, 
 	cmd.Stdout = &stdout
 	err := cmd.Run()
 
-	return stderr.Bytes(), stdout.Bytes(), err
+	return stdout.Bytes(), stderr.Bytes(), err
 }
