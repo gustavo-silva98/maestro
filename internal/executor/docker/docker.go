@@ -8,7 +8,7 @@ import (
 
 type Docker struct{}
 
-func (Docker) Execute(ctx context.Context, name string, args []string) ([]byte, string, error) {
+func (Docker) Execute(ctx context.Context, name string, args []string) ([]byte, []byte, error) {
 	var stderr, stdout bytes.Buffer
 
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -16,5 +16,5 @@ func (Docker) Execute(ctx context.Context, name string, args []string) ([]byte, 
 	cmd.Stdout = &stdout
 	err := cmd.Run()
 
-	return stderr.Bytes(), stdout.String(), err
+	return stderr.Bytes(), stdout.Bytes(), err
 }

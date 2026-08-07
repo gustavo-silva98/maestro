@@ -13,7 +13,7 @@ func TestExecute(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Erro ao executar echo: %v", err)
 		}
-		if strings.TrimSpace(stdout) != "hello" {
+		if strings.TrimSpace(string(stdout)) != "hello" {
 			t.Fatalf("Valor esperado: hello - Valor Recebido: %v", stdout)
 		}
 	})
