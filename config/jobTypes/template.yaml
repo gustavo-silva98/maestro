@@ -1,0 +1,16 @@
+job: jobType
+jiraFields:
+  # Campos de Necessidade e Sistema de chamado Jira para invocar Automação
+  need: Necessidade
+  system: Sistema
+  attachmentFilename: "NomeDoAnexo.csv"
+  answerCommentTemplate: "Modelo de resposta"
+
+container:
+  image: imageName
+  containerDir: scripts/script
+indicators:
+  # Time Per Operation, ou seja, tempo da iteração por objeto de entrada. Medido em segundos.
+  timePerOp: 60
+  # Time saved é a diferença entre a realização manual e a realização automatizada p/ obj. de entrada
+  timeSaved: 60
