@@ -53,6 +53,7 @@ func (f *FootballOrchestrator) ExecuteJob(result ExecutionResult) (ExecutionResu
 	result.Logs = stderr
 
 	if err != nil {
+		result.Status = "Failed"
 		result.ExitCode = 1
 		var exitErr *exec.ExitError
 		// Se o processo retornou exit code != 0
@@ -66,7 +67,7 @@ func (f *FootballOrchestrator) ExecuteJob(result ExecutionResult) (ExecutionResu
 			result.Logs,
 		)
 	}
-
+	result.Status = "Success"
 	result.ExitCode = 0
 	if err := f.DB.FinishJob(ctx, result.Job); err != nil {
 		return ExecutionResult{}, err

@@ -51,7 +51,7 @@ func TestExecuteJob(t *testing.T) {
 		result := ExecutionResult{
 			JobID:     "jobId",
 			Status:    "status",
-			ExitCode:  1,
+			ExitCode:  0,
 			StartedAt: now,
 			Job:       domain.Job{},
 			Task:      domain.Task{},
@@ -70,6 +70,11 @@ func TestExecuteJob(t *testing.T) {
 			t.Fatalf("Erro ao testar Logs/Stderr do Execute: %v", resultOut.Logs)
 		case !bytes.Equal(resultOut.Payload, exe.StdOut):
 			t.Fatalf("Erro ao testar StdOut do Execute: %v", resultOut.Payload)
+		case resultOut.Status != "Success":
+			t.Fatalf("Erro ao setar o resultado da automação como sucesso : Recebido: %v", resultOut.Status)
+		case resultOut.ExitCode != 0:
+			t.Fatalf("Falha ao setar exitCode como 0. Recebido: %v", resultOut.ExitCode)
+
 		}
 	})
 	t.Run("ExitCode no resultado do exec", func(t *testing.T) {
@@ -89,7 +94,7 @@ func TestExecuteJob(t *testing.T) {
 		result := ExecutionResult{
 			JobID:     "jobId",
 			Status:    "status",
-			ExitCode:  1,
+			ExitCode:  42,
 			StartedAt: now,
 			Job:       domain.Job{},
 			Task:      domain.Task{},
@@ -115,6 +120,12 @@ func TestExecuteJob(t *testing.T) {
 		}
 		if !bytes.Equal(resultOut.Logs, exe.StdErr) {
 			t.Fatalf("stderr separado: %s - recebido: %s", exe.StdErr, resultOut.Logs)
+		}
+		if resultOut.Status != "Failed" {
+			t.Fatalf("Erro ao validar status da automação como falha: %v", resultOut.Status)
+		}
+		if resultOut.ExitCode != 42 {
+			t.Fatalf("Erro ao validar status code como 1: Recebido: %v", resultOut.ExitCode)
 		}
 	})
 }
