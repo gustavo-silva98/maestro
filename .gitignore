@@ -1,2 +1,6 @@
 *.env
 *.out
+*\output
+*.csv
+*.zip
+*.html

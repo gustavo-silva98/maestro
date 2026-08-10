@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${MAESTRO_DATABASE_USER}
+      POSTGRES_PASSWORD: ${MAESTRO_DATABASE_PASSWORD}
+      POSTGRES_DB: ${MAESTRO_DATABASE_DB}
+
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+
+volumes:
+  postgres_data:
