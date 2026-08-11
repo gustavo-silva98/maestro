@@ -1,8 +1,10 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -62,4 +64,40 @@ func TestLoadConfig_MissingConfigFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("esperava erro por falta de config.yaml, recebeu nil")
 	}
+}
+
+func TestLoadJobTypes(t *testing.T) {
+	t.Run("Carregamento Ok com happy path", func(t *testing.T) {
+		dir, err := testDataDir(t)
+		if err != nil {
+			t.Fatalf("Falha ao setar diretório de pasta: %v", err)
+		}
+		types, err := LoadJobTypes(dir)
+		if err != nil {
+			t.Fatalf("Falha ao carregar arquivos: %v", err)
+		}
+		if len(types) == 0 {
+			t.Fatalf("Falha ao carregar jobs. Lenght 0")
+		}
+		football, ok := types["football"]
+		if !ok {
+			t.Fatal("Não carregado tipo 'football'")
+		}
+		if football.Container.ImageName != "football-rpa" {
+			t.Errorf("Image name esperado era football-rpa: Recebido %v", football.Container.ImageName)
+		}
+		if football.JiraFields.AnswerCommentTemplate != "Modelo de resposta" {
+			t.Errorf("Falha ao ler template de comentário")
+		}
+
+	})
+}
+
+func testDataDir(_ *testing.T) (string, error) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", errors.New("erro ao receber caller")
+	}
+	return filepath.Join(filepath.Dir(file), "testdata", "jobTypes"), nil
+
 }

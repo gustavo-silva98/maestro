@@ -6,7 +6,7 @@ jiraFields:
   answerCommentTemplate: "Modelo de resposta"
 
 container:
-    imageName: football-rpa
+    imageName: imageName
     containerDir: scripts/football
 indicators:
   timePerOp: 60

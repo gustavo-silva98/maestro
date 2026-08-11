@@ -2,7 +2,8 @@ package config
 
 import (
 	"fmt"
-	"log"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -35,10 +36,28 @@ type Config struct {
 	} `mapstructure:"database"`
 }
 
+type JobType struct {
+	JobType    string `mapstructure:"jobType"`
+	JiraFields struct {
+		Need                  string `mapstructure:"need"`
+		System                string `mapstructure:"system"`
+		AttachmentFilename    string `mapstructure:"attachmentFilename"`
+		AnswerCommentTemplate string `mapstructure:"answerCommentTemplate"`
+	} `mapstructure:"jiraFields"`
+	Container struct {
+		ImageName    string `mapstructure:"imageName"`
+		ContainerDir string `mapstructure:"containerDir"`
+	} `mapstructure:"container"`
+	Indicators struct {
+		TimerPerOp int `mapstructure:"timePerOp"`
+		TimeSaved  int `mapstructure:"timesaved"`
+	}
+}
+
 func LoadConfig() (Config, error) {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal(err)
+		return Config{}, fmt.Errorf("erro lendo config: %w", err)
 	}
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -56,4 +75,25 @@ func LoadConfig() (Config, error) {
 		return Config{}, fmt.Errorf("erro parseando config: %w", err)
 	}
 	return cfg, nil
+}
+
+func LoadJobTypes(dir string) (map[string]JobType, error) {
+	f, err := os.ReadDir(dir)
+	if err != nil {
+		return map[string]JobType{}, err
+	}
+	types := make(map[string]JobType)
+	for _, file := range f {
+		v := viper.New()
+		v.SetConfigFile(filepath.Join(dir, file.Name()))
+		if err := v.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("Falha ao ler configurações: %v", err)
+		}
+		var jt JobType
+		if err := v.Unmarshal(&jt); err != nil {
+			return nil, fmt.Errorf("erro ao decodificar %s: %w", file.Name(), err)
+		}
+		types[jt.JobType] = jt
+	}
+	return types, nil
 }
