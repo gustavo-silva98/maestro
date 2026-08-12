@@ -97,6 +97,22 @@ func TestLoadJobTypes(t *testing.T) {
 			t.Fatal("Falha ao testar erro, pois veio sem erro")
 		}
 	})
+	t.Run("Erro de arquivo de outro formato não suportado", func(t *testing.T) {
+		dir, err := testDataDir(t)
+		if err != nil {
+			t.Fatalf("Falha ao setar diretório de pasta: %v", err)
+		}
+		f, err := os.Create(filepath.Join(dir, "temp.csv"))
+		if err != nil {
+			t.Fatalf("Falha ao criar arquivo temporário: %v", err)
+		}
+		f.Close()
+		defer os.Remove(filepath.Join(dir, "temp.csv"))
+		_, err = LoadJobTypes(dir)
+		if err == nil {
+			t.Error("Falha ao gerar erro de tipo não suportado")
+		}
+	})
 }
 
 func testDataDir(_ *testing.T) (string, error) {

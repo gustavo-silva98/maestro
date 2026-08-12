@@ -7,7 +7,7 @@ jiraFields:
   answerCommentTemplate: "Modelo de resposta"
 
 container:
-  image: imageName
+  imageName: imageName
   containerDir: scripts/script
 indicators:
   # Time Per Operation, ou seja, tempo da iteração por objeto de entrada. Medido em segundos.
