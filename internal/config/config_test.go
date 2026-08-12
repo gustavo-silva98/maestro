@@ -25,8 +25,7 @@ func TestLoadConfig_Success(t *testing.T) {
 	cfgYAML := `jira:
   username: test@test.com
   token: token
-  tenant_name: tenant-test
-`
+  tenant_name: tenant-test`
 	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(cfgYAML), 0644); err != nil {
 		t.Fatalf("write config.yaml: %v", err)
 	}
@@ -90,6 +89,13 @@ func TestLoadJobTypes(t *testing.T) {
 			t.Errorf("Falha ao ler template de comentário")
 		}
 
+	})
+
+	t.Run("Erro ao achar diretório", func(t *testing.T) {
+		_, err := LoadJobTypes("caminho/inexistente")
+		if err == nil {
+			t.Fatal("Falha ao testar erro, pois veio sem erro")
+		}
 	})
 }
 
