@@ -42,9 +42,16 @@ type JiraAttachment struct {
 	Filename string `json:"filename"`
 }
 
+type JiraCustomField struct {
+	Value string `json:"value"`
+}
+type JiraIssueFields struct {
+	JiraAttachment []JiraAttachment `json:"attachment"`
+	Necessidade    JiraCustomField  `json:"customfield_12332"`
+	Sistema        JiraCustomField  `json:"customfield_10081"`
+}
+
 type JiraIssue struct {
-	ID     string `json:"id"`
-	Fields struct {
-		JiraAttachment []JiraAttachment `json:"attachment"`
-	} `json:"fields"`
+	ID     string          `json:"id"`
+	Fields JiraIssueFields `json:"fields"`
 }

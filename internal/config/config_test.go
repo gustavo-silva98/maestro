@@ -1,8 +1,10 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -23,8 +25,7 @@ func TestLoadConfig_Success(t *testing.T) {
 	cfgYAML := `jira:
   username: test@test.com
   token: token
-  tenant_name: tenant-test
-`
+  tenant_name: tenant-test`
 	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(cfgYAML), 0644); err != nil {
 		t.Fatalf("write config.yaml: %v", err)
 	}
@@ -62,4 +63,63 @@ func TestLoadConfig_MissingConfigFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("esperava erro por falta de config.yaml, recebeu nil")
 	}
+}
+
+func TestLoadJobTypes(t *testing.T) {
+	t.Run("Carregamento Ok com happy path", func(t *testing.T) {
+		dir, err := testDataDir(t)
+		if err != nil {
+			t.Fatalf("Falha ao setar diretório de pasta: %v", err)
+		}
+		types, err := LoadJobTypes(dir)
+		if err != nil {
+			t.Fatalf("Falha ao carregar arquivos: %v", err)
+		}
+		if len(types) == 0 {
+			t.Fatalf("Falha ao carregar jobs. Lenght 0")
+		}
+		football, ok := types["football"]
+		if !ok {
+			t.Fatal("Não carregado tipo 'football'")
+		}
+		if football.Container.ImageName != "football-rpa" {
+			t.Errorf("Image name esperado era football-rpa: Recebido %v", football.Container.ImageName)
+		}
+		if football.JiraFields.AnswerCommentTemplate != "Modelo de resposta" {
+			t.Errorf("Falha ao ler template de comentário")
+		}
+
+	})
+
+	t.Run("Erro ao achar diretório", func(t *testing.T) {
+		_, err := LoadJobTypes("caminho/inexistente")
+		if err == nil {
+			t.Fatal("Falha ao testar erro, pois veio sem erro")
+		}
+	})
+	t.Run("Erro de arquivo de outro formato não suportado", func(t *testing.T) {
+		dir, err := testDataDir(t)
+		if err != nil {
+			t.Fatalf("Falha ao setar diretório de pasta: %v", err)
+		}
+		f, err := os.Create(filepath.Join(dir, "temp.csv"))
+		if err != nil {
+			t.Fatalf("Falha ao criar arquivo temporário: %v", err)
+		}
+		f.Close()
+		defer os.Remove(filepath.Join(dir, "temp.csv"))
+		_, err = LoadJobTypes(dir)
+		if err == nil {
+			t.Error("Falha ao gerar erro de tipo não suportado")
+		}
+	})
+}
+
+func testDataDir(_ *testing.T) (string, error) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", errors.New("erro ao receber caller")
+	}
+	return filepath.Join(filepath.Dir(file), "testdata", "jobTypes"), nil
+
 }

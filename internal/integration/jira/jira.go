@@ -13,6 +13,10 @@ import (
 	"path/filepath"
 )
 
+type JiraFieldReader interface {
+	GetIssue(issueId string) (JiraIssue, error)
+}
+
 type JiraIntegration struct {
 	UserName   string
 	Token      string
@@ -242,24 +246,24 @@ func (jira *JiraIntegration) AddAttachment(issueId string, filePath string) erro
 
 	writer.Close()
 
-	url := fmt.Sprintf("%v/rest/api/2/issue/%v/attachments",jira.BaseUrl,issueId)
-	req,err := http.NewRequest("POST",url,body)
+	url := fmt.Sprintf("%v/rest/api/2/issue/%v/attachments", jira.BaseUrl, issueId)
+	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
-		return fmt.Errorf("erro ao criar request %v",err)
+		return fmt.Errorf("erro ao criar request %v", err)
 	}
 
-	req.Header.Add("Content-Type",writer.FormDataContentType())
-	req.Header.Add("X-Atlassian-Token","no-check")
-	req.SetBasicAuth(jira.UserName,jira.Token)
+	req.Header.Add("Content-Type", writer.FormDataContentType())
+	req.Header.Add("X-Atlassian-Token", "no-check")
+	req.SetBasicAuth(jira.UserName, jira.Token)
 
-	resp,err := jira.Client.Do(req)
+	resp, err := jira.Client.Do(req)
 	if err != nil {
-		return fmt.Errorf("erro na request %v",err)
+		return fmt.Errorf("erro na request %v", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		respBody,_ := io.ReadAll(resp.Body)
-		return fmt.Errorf("jira retornou %d: %s", resp.StatusCode,respBody)
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("jira retornou %d: %s", resp.StatusCode, respBody)
 	}
 	return nil
 
