@@ -1,0 +1,13 @@
+jobType: football
+jiraFields:
+  need: Pesquisa
+  system: Transfermarket
+  attachmentFilename: "Input.csv"
+  answerCommentTemplate: "Modelo de resposta"
+
+container:
+    imageName: football-rpa
+    containerDir: scripts/football
+indicators:
+  timePerOp: 60
+  timeSaved: 60
