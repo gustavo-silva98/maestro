@@ -137,13 +137,13 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		ctx := context.Background()
 		job := domain.Job{
-			ID:          uuid.NewString(),
-			IssueKey:    issue,
-			TentantName: api.Config.Jira.TenantName,
-			Status:      "Running",
-			CreatedAt:   time.Now().UTC(),
-			FinishedAt:  time.Now().UTC(),
-			JobType:     "Futebol",
+			ID:         uuid.NewString(),
+			IssueKey:   issue,
+			TenantName: api.Config.Jira.TenantName,
+			Status:     "Running",
+			CreatedAt:  time.Now().UTC(),
+			FinishedAt: time.Now().UTC(),
+			Type:       "Futebol",
 		}
 		task := domain.Task{
 			ID:         uuid.NewString(),
@@ -205,7 +205,7 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 			log.Printf("ERRO no job %s: Falha ao comentar chamado: %v", job.ID, err)
 			return
 		}
-		job.SavedMinutes = float64(countLinesFast(attachment) - 1)
+		task.SavedMinutes = countLinesFast(attachment) - 1
 		if err := api.DB.CreateJob(ctx, job); err != nil {
 			log.Printf("ERRO no job %s: erro ao criar Job %v", job.ID, err)
 		} else {
