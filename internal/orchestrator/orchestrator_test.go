@@ -22,7 +22,7 @@ func TestBuildVolumes(t *testing.T) {
 		}
 		expOutputDir := fmt.Sprintf("%s/scripts/football/output-teste:/app/Prints-teste", cwd)
 		expInputFile := fmt.Sprintf("%s/scripts/football/input-teste.csv:/app/input-teste.csv", cwd)
-		inputFile, outputDir, err := buildVolumes("teste")
+		inputFile, outputDir := buildVolumes("teste")
 		if err != nil {
 			t.Fatalf("Erro ao gerar string de volumes: %v", err)
 		}

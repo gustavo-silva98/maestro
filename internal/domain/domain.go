@@ -22,6 +22,7 @@ type Job struct {
 	Type       string
 	Status     Status
 	InputFile  string
+	ItemCount  int
 	CreatedAt  time.Time
 	FinishedAt time.Time
 }
