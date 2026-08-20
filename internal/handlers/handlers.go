@@ -3,7 +3,6 @@ package handlers
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,18 +11,14 @@ import (
 	"io"
 	"log"
 	"maestro/internal/config"
-	"maestro/internal/domain"
 	"maestro/internal/integration/jira"
 	"maestro/internal/orchestrator"
 	"maestro/internal/repository"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/google/uuid"
 )
 
 func EnableCORS(next http.Handler) http.Handler {
@@ -94,6 +89,7 @@ func (api *Backend) ReadyEndpoint(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonData)
 }
 
+/*
 func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
@@ -218,13 +214,6 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 			log.Printf("task criada para JobId %v", task.JobID)
 		}
 
-		execution := orchestrator.ExecutionResult{
-			JobID:     job.ID,
-			StartedAt: time.Now().UTC(),
-			Job:       job,
-			Task:      task,
-		}
-
 		log.Printf("Iniciando execução do Job %s", job.ID)
 		if err := api.DB.SetJobRunning(ctx, job); err != nil {
 			log.Printf("ERRO no job %s: erro ao setar job running: %v", job.ID, err)
@@ -232,7 +221,7 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// A execução longa acontece aqui
-		_, err = api.Orchestrator.ExecuteJob(execution)
+		_, err = api.Orchestrator.ExecuteJob()
 		if err != nil {
 			log.Printf("ERRO na execução do Job %s: %v", job.ID, err)
 			// Aqui você poderia implementar uma lógica para marcar o job como "Failed"
@@ -282,6 +271,7 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Job %s finalizado com sucesso.", job.ID)
 	}() // A `()` no final executa a função anônima
 }
+*/
 
 func checkHmac(secret, received string, data []byte) bool {
 	hash := hmac.New(sha256.New, []byte(secret))

@@ -2,12 +2,7 @@ package handlers
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"io"
-	"maestro/internal/config"
-	"maestro/internal/integration/jira"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -54,6 +49,7 @@ func TestReadyEndpoint(t *testing.T) {
 	}
 }
 
+/*
 func TestTestAutomation(t *testing.T) {
 	fake := setupFakeJira(t)
 	defer fake.Close()
@@ -106,3 +102,4 @@ func TestTestAutomation(t *testing.T) {
 		}
 	})
 }
+*/

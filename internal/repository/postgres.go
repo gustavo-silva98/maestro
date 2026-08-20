@@ -75,6 +75,12 @@ func (p *Postgres) SetJobPending(ctx context.Context, job domain.Job) error {
 	return err
 }
 
+func (p *Postgres) SetJobFailed(ctx context.Context, job domain.Job) error {
+	_, err := p.pool.Exec(ctx, `
+	UPDATE jobs SET status = $1 WHERE id = $2`, domain.StatusFailed, job.ID)
+	return err
+}
+
 func (p *Postgres) SetJobRunning(ctx context.Context, job domain.Job) error {
 	_, err := p.pool.Exec(ctx, `
 		UPDATE jobs SET status = $1 WHERE id = $2
