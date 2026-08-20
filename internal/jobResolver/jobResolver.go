@@ -1,6 +1,9 @@
 package jobResolver
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"maestro/internal/config"
 	"maestro/internal/integration/jira"
@@ -9,6 +12,7 @@ import (
 type JobResolver struct {
 	JobTypes   map[string]config.JobType
 	jiraClient jira.JiraFieldReader
+	hmacSecret string
 }
 
 func (jr *JobResolver) GetJobInfo(issueId string) (jira.JiraIssue, error) {
@@ -32,4 +36,20 @@ func (jr *JobResolver) ResolveJob(issue string) (config.JobType, error) {
 		}
 	}
 	return config.JobType{}, errors.New("Nenhum job identificado")
+}
+
+func checkHmac(secret, received string, data []byte) bool {
+	hash := hmac.New(sha256.New, []byte(secret))
+	hash.Write([]byte(data))
+	expected := hash.Sum(nil)
+
+	receivedHex, err := hex.DecodeString(received)
+	if err != nil {
+		return false
+	}
+	return hmac.Equal(expected, []byte(receivedHex))
+}
+
+func (jr *JobResolver) AuthenticateJiraWebhook(xhub string, body []byte) bool {
+	return checkHmac(jr.hmacSecret, xhub, body)
 }

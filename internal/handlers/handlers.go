@@ -12,11 +12,13 @@ import (
 	"log"
 	"maestro/internal/config"
 	"maestro/internal/integration/jira"
+	"maestro/internal/jobResolver"
 	"maestro/internal/orchestrator"
 	"maestro/internal/repository"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/bytedance/sonic"
 )
@@ -45,6 +47,38 @@ type Backend struct {
 	Config       *config.Config
 	DB           repository.MaestroRepository
 	Orchestrator orchestrator.Orchestrator
+}
+
+type Handler struct {
+	jr jobResolver.JobResolver
+}
+
+func (h *Handler) HandleJiraWebhook(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	xhub := strings.Split(r.Header.Get("X-Hub-Signature"), "=")
+	if len(xhub) != 2 {
+		log.Printf("Erro ao validar xhub. Len: %v", len(xhub))
+		http.Error(w, "BadRequest", http.StatusBadRequest)
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Falha ao ler Body: %v", err)
+		http.Error(w, "BadRequest", http.StatusBadRequest)
+	}
+	if !h.jr.AuthenticateJiraWebhook(xhub[1], body) {
+		log.Printf("Xhub Hmac não é valido - Erro na autenticação")
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	}
+
+	var webhookBody jira.JiraWebhookBody
+	if err := json.Unmarshal(body, &webhookBody); err != nil {
+		log.Printf("Erro em decodificar body: %v", err)
+		http.Error(w, "Internal Error", http.StatusInternalServerError)
+	}
+	// implementar enfileiramento
+	// implementar delegação pra jobResolver
 }
 
 type JobStatsResponse struct {
