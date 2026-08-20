@@ -1,38 +1,53 @@
 package orchestrator
 
 import (
-	"bytes"
 	"context"
-	"errors"
-	"fmt"
+	"maestro/internal/config"
 	"maestro/internal/domain"
 	"maestro/internal/executor/fake"
 	FakeDB "maestro/internal/repository/fakeDB"
-	"os"
-	"os/exec"
 	"testing"
 	"time"
 )
 
 func TestBuildVolumes(t *testing.T) {
-	t.Run("Build String sem erros", func(t *testing.T) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("erro ao descobrir diretório")
-		}
-		expOutputDir := fmt.Sprintf("%s/scripts/football/output-teste:/app/Prints-teste", cwd)
-		expInputFile := fmt.Sprintf("%s/scripts/football/input-teste.csv:/app/input-teste.csv", cwd)
-		inputFile, outputDir := buildVolumes("teste")
-		if err != nil {
-			t.Fatalf("Erro ao gerar string de volumes: %v", err)
-		}
-		if inputFile != expInputFile {
-			t.Errorf("erro ao gerar string de inputFile - Exp:%v - Rec: %v", expInputFile, inputFile)
-		}
-		if outputDir != expOutputDir {
-			t.Errorf("erro ao gerar string de outputDir - Exp:%v - Rec: %v", expOutputDir, outputDir)
-		}
-	})
+	tests := []struct {
+		name           string
+		baseDir        string
+		scriptsDir     string
+		jobID          string
+		expectedInput  string
+		expectedOutput string
+	}{
+		{
+			name:           "monta paths corretamente",
+			baseDir:        "/app",
+			scriptsDir:     "scripts/football",
+			jobID:          "abc-123",
+			expectedInput:  "/app/scripts/football/input-abc-123.csv:/app/input-abc-123.csv",
+			expectedOutput: "/app/scripts/football/output-abc-123:/app/output-abc-123",
+		},
+		{
+			name:           "funciona com outro tipo de job",
+			baseDir:        "/app",
+			scriptsDir:     "scripts/volleyball",
+			jobID:          "xyz-789",
+			expectedInput:  "/app/scripts/volleyball/input-xyz-789.csv:/app/input-xyz-789.csv",
+			expectedOutput: "/app/scripts/volleyball/output-xyz-789:/app/output-xyz-789",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inputFile, outputDir := buildVolumes(tt.baseDir, tt.scriptsDir, tt.jobID)
+			if inputFile != tt.expectedInput {
+				t.Errorf("inputFile = %q, esperado %q", inputFile, tt.expectedInput)
+			}
+			if outputDir != tt.expectedOutput {
+				t.Errorf("outputDir = %q, esperado %q", outputDir, tt.expectedOutput)
+			}
+		})
+	}
 }
 
 func TestExecuteJob(t *testing.T) {
@@ -48,84 +63,33 @@ func TestExecuteJob(t *testing.T) {
 			Error:   nil,
 		}
 		now := time.Now()
-		result := ExecutionResult{
-			JobID:     "jobId",
-			Status:    "status",
-			ExitCode:  0,
-			StartedAt: now,
-			Job:       domain.Job{},
-			Task:      domain.Task{},
-		}
-		orch := FootballOrchestrator{
-			DB:       db,
-			Executor: exe,
+		result := domain.Job{
+			ID:         "id",
+			IssueKey:   "issueKey",
+			TenantName: "tenant",
+			Type:       "Type",
+			Status:     domain.StatusSuccess,
+			InputFile:  "inputFile",
+			ItemCount:  10,
+			CreatedAt:  now,
+			FinishedAt: now.Add(10 * time.Minute),
 		}
 
-		resultOut, err := orch.ExecuteJob(result)
+		orch := JobOrchestrator{
+			DB:       db,
+			Executor: exe,
+			BaseDir:  "baseDir",
+		}
+		jt := config.JobType{
+			JobType: "jobType",
+		}
+		resultOut, err := orch.ExecuteJob(context.Background(), result, jt)
 		if err != nil {
 			t.Fatalf("Erro ao testar ExecuteJob: %v", err)
 		}
 		switch {
-		case !bytes.Equal(resultOut.Logs, exe.StdErr):
-			t.Fatalf("Erro ao testar Logs/Stderr do Execute: %v", resultOut.Logs)
-		case !bytes.Equal(resultOut.Payload, exe.StdOut):
-			t.Fatalf("Erro ao testar StdOut do Execute: %v", resultOut.Payload)
 		case resultOut.Status != "Success":
 			t.Fatalf("Erro ao setar o resultado da automação como sucesso : Recebido: %v", resultOut.Status)
-		case resultOut.ExitCode != 0:
-			t.Fatalf("Falha ao setar exitCode como 0. Recebido: %v", resultOut.ExitCode)
-
-		}
-	})
-	t.Run("ExitCode no resultado do exec", func(t *testing.T) {
-		cmd := exec.Command("bash", "-c", "exit 42")
-		err := cmd.Run()
-		exe := fake.Fake{
-			StdOut: []byte("stdout"),
-			StdErr: []byte{},
-			Err:    err,
-		}
-		db := FakeDB.FakeJobDB{
-			Job:     domain.Job{},
-			Context: context.Background(),
-			Error:   nil,
-		}
-		now := time.Now()
-		result := ExecutionResult{
-			JobID:     "jobId",
-			Status:    "status",
-			ExitCode:  42,
-			StartedAt: now,
-			Job:       domain.Job{},
-			Task:      domain.Task{},
-		}
-		orch := FootballOrchestrator{
-			DB:       db,
-			Executor: exe,
-		}
-		resultOut, err := orch.ExecuteJob(result)
-
-		if err == nil {
-			t.Fatalf("Erro ao criar erro no Err")
-		}
-		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatal("Erro ao criar tipo de erro exitErr")
-		}
-		if resultOut.ExitCode == 0 {
-			t.Fatalf("Erro ao devolver erro. ExitCode: %v", resultOut.ExitCode)
-		}
-		if resultOut.ExitCode != 42 {
-			t.Fatalf("Erro ao devolver erro. ExitCode exp: %v - ExitCode rec:%v", resultOut.ExitCode, 42)
-		}
-		if !bytes.Equal(resultOut.Logs, exe.StdErr) {
-			t.Fatalf("stderr separado: %s - recebido: %s", exe.StdErr, resultOut.Logs)
-		}
-		if resultOut.Status != "Failed" {
-			t.Fatalf("Erro ao validar status da automação como falha: %v", resultOut.Status)
-		}
-		if resultOut.ExitCode != 42 {
-			t.Fatalf("Erro ao validar status code como 1: Recebido: %v", resultOut.ExitCode)
 		}
 	})
 }

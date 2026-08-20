@@ -36,7 +36,7 @@ func main() {
 		log.Println(err)
 		return
 	}
-	orch := orchestrator.FootballOrchestrator{
+	orch := orchestrator.JobOrchestrator{
 		DB: db,
 	}
 	api := handlers.Backend{
