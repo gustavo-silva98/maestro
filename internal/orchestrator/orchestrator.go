@@ -26,7 +26,7 @@ type JobOrchestrator struct {
 
 func (jo *JobOrchestrator) ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType) (domain.Job, error) {
 	if err := jo.DB.SetJobPending(ctx, job); err != nil {
-		return domain.Job{}, err
+		return job, fmt.Errorf("falha o setar job como pending: %v", err)
 	}
 
 	task, err := jo.runTask(ctx, job.ID, jt, job.ItemCount)
@@ -34,8 +34,9 @@ func (jo *JobOrchestrator) ExecuteJob(ctx context.Context, job domain.Job, jt co
 		job.Status = domain.StatusFailed
 		job.FinishedAt = time.Now()
 		if dbErr := jo.DB.SetJobFailed(ctx, job); dbErr != nil {
-			return domain.Job{}, fmt.Errorf("job falhou e não foi possível persistir: %w", dbErr)
+			return job, fmt.Errorf("job falhou e não foi possível persistir: %w", dbErr)
 		}
+		return job, fmt.Errorf("job falhou e não foi possível executar a task: %v", err)
 	}
 	if dbErr := jo.DB.CreateTask(ctx, task); dbErr != nil {
 		return domain.Job{}, fmt.Errorf("erro ao persistir task: %w", dbErr)

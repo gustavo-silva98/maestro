@@ -2,10 +2,12 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"maestro/internal/config"
 	"maestro/internal/domain"
 	"maestro/internal/executor/fake"
 	FakeDB "maestro/internal/repository/fakeDB"
+	"os/exec"
 	"testing"
 	"time"
 )
@@ -51,7 +53,7 @@ func TestBuildVolumes(t *testing.T) {
 }
 
 func TestExecuteJob(t *testing.T) {
-	t.Run("Execução sem erros validando leitura de stderr,stdout,err", func(t *testing.T) {
+	t.Run("Execução sem erros", func(t *testing.T) {
 		exe := fake.Fake{
 			StdOut: []byte("stdout"),
 			StdErr: []byte{},
@@ -88,8 +90,97 @@ func TestExecuteJob(t *testing.T) {
 			t.Fatalf("Erro ao testar ExecuteJob: %v", err)
 		}
 		switch {
-		case resultOut.Status != "Success":
+		case resultOut.Status != domain.StatusSuccess:
 			t.Fatalf("Erro ao setar o resultado da automação como sucesso : Recebido: %v", resultOut.Status)
+		case resultOut.FinishedAt.Equal(result.FinishedAt):
+			t.Fatalf("erro ao setar finished at: %v", resultOut.FinishedAt)
+		case result.IssueKey != resultOut.IssueKey:
+			t.Fatalf("erro ao setar finished at: %v", resultOut.IssueKey)
 		}
+	})
+	t.Run("Execução com erro no BD", func(t *testing.T) {
+		exe := fake.Fake{
+			StdOut: []byte("stdout"),
+			StdErr: []byte{},
+			Err:    nil,
+		}
+		db := FakeDB.FakeJobDB{
+			Job:     domain.Job{},
+			Context: context.Background(),
+			Error:   errors.New("erro ao usar o BD"),
+		}
+		now := time.Now()
+		result := domain.Job{
+			ID:         "id",
+			IssueKey:   "issueKey",
+			TenantName: "tenant",
+			Type:       "Type",
+			Status:     domain.StatusSuccess,
+			InputFile:  "inputFile",
+			ItemCount:  10,
+			CreatedAt:  now,
+			FinishedAt: now.Add(10 * time.Minute),
+		}
+
+		orch := JobOrchestrator{
+			DB:       db,
+			Executor: exe,
+			BaseDir:  "baseDir",
+		}
+		jt := config.JobType{
+			JobType: "jobType",
+		}
+		_, err := orch.ExecuteJob(context.Background(), result, jt)
+		if err == nil {
+			t.Fatalf("Erro ao testar ExecuteJob: %v", err)
+		}
+		if err.Error() != "falha o setar job como pending: erro ao usar o BD" {
+			t.Fatalf("erro ao simular erro no bd: %v", err)
+		}
+	})
+	t.Run("Erro na execucao", func(t *testing.T) {
+		cmd := exec.Command("bash", "-c", "exit 42")
+		err := cmd.Run()
+
+		exe := fake.Fake{
+			StdOut: []byte("stdout"),
+			StdErr: []byte{},
+			Err:    err,
+		}
+		db := FakeDB.FakeJobDB{
+			Job:     domain.Job{},
+			Context: context.Background(),
+			Error:   nil,
+		}
+		now := time.Now()
+		result := domain.Job{
+			ID:         "id",
+			IssueKey:   "issueKey",
+			TenantName: "tenant",
+			Type:       "Type",
+			Status:     domain.StatusSuccess,
+			InputFile:  "inputFile",
+			ItemCount:  10,
+			CreatedAt:  now,
+			FinishedAt: now.Add(10 * time.Minute),
+		}
+
+		orch := JobOrchestrator{
+			DB:       db,
+			Executor: exe,
+			BaseDir:  "baseDir",
+		}
+		jt := config.JobType{
+			JobType: "jobType",
+		}
+		resultOut, err := orch.ExecuteJob(context.Background(), result, jt)
+		if err == nil {
+			t.Fatalf("Erro ao testar ExecuteJob com erro: %v", err)
+		}
+
+		if resultOut.Status != domain.StatusFailed {
+			t.Errorf("falha ao gerar status de erro: %v", resultOut.Status)
+		}
+
 	})
 }
