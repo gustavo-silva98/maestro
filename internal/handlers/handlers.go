@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"maestro/internal/config"
+	"maestro/internal/domain"
 	"maestro/internal/integration/jira"
 	"maestro/internal/jobResolver"
 	"maestro/internal/orchestrator"
@@ -18,9 +19,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
+	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/google/uuid"
 )
 
 func EnableCORS(next http.Handler) http.Handler {
@@ -51,34 +53,45 @@ type Backend struct {
 
 type Handler struct {
 	jr jobResolver.JobResolver
+	db repository.JobRepository
 }
 
 func (h *Handler) HandleJiraWebhook(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	xhub := strings.Split(r.Header.Get("X-Hub-Signature"), "=")
-	if len(xhub) != 2 {
-		log.Printf("Erro ao validar xhub. Len: %v", len(xhub))
-		http.Error(w, "BadRequest", http.StatusBadRequest)
-		return
-	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Falha ao ler Body: %v", err)
 		http.Error(w, "BadRequest", http.StatusBadRequest)
-	}
-	if !h.jr.AuthenticateJiraWebhook(xhub[1], body) {
-		log.Printf("Xhub Hmac não é valido - Erro na autenticação")
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
 	}
 
 	var webhookBody jira.JiraWebhookBody
 	if err := json.Unmarshal(body, &webhookBody); err != nil {
+		log.Printf("Erro em enfileirar job: %v", err)
+		http.Error(w, "Internal Error", http.StatusInternalServerError)
+		return
+	}
+
+	job := domain.Job{
+		ID:        uuid.New().String(),
+		CreatedAt: time.Now(),
+		IssueKey:  webhookBody.Issue.Key,
+	}
+
+	if err := h.db.CreateJob(r.Context(), job); err != nil {
 		log.Printf("Erro em decodificar body: %v", err)
 		http.Error(w, "Internal Error", http.StatusInternalServerError)
+		return
 	}
-	// implementar enfileiramento
-	// implementar delegação pra jobResolver
+
+	w.WriteHeader(http.StatusAccepted)
+	go func() {
+		if _, err := h.jr.ResolveJob(webhookBody.Issue.Key); err != nil {
+			log.Printf("Falha ao validar job %v: %v", webhookBody.Issue.Key, err)
+		}
+	}()
+
 }
 
 type JobStatsResponse struct {
@@ -121,6 +134,31 @@ func (api *Backend) ReadyEndpoint(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 	w.Write(jsonData)
+}
+
+func verifyHMAC(secret string) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				log.Println("Falha ao ler body da request")
+				http.Error(w, "erro ao ler body da request", http.StatusBadRequest)
+			}
+			r.Body = io.NopCloser(bytes.NewBuffer(body))
+
+			mac := hmac.New(sha256.New, []byte(secret))
+			mac.Write(body)
+			expected := hex.EncodeToString(mac.Sum(nil))
+
+			got := r.Header.Get("X-Hub-Signature-256")
+			if !hmac.Equal([]byte(got), []byte(expected)) {
+				log.Println("Assinatura inválida")
+				http.Error(w, "Falha na autenticação", http.StatusUnauthorized)
+				return
+			}
+			next(w, r)
+		}
+	}
 }
 
 /*
@@ -306,18 +344,6 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 	}() // A `()` no final executa a função anônima
 }
 */
-
-func checkHmac(secret, received string, data []byte) bool {
-	hash := hmac.New(sha256.New, []byte(secret))
-	hash.Write([]byte(data))
-	expected := hash.Sum(nil)
-
-	receivedHex, err := hex.DecodeString(received)
-	if err != nil {
-		return false
-	}
-	return hmac.Equal(expected, []byte(receivedHex))
-}
 
 func ZipFolder(srcDir, destZipPath string) error {
 	// Garante que o diretório de origem existe
