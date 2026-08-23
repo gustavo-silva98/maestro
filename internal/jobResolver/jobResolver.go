@@ -4,12 +4,21 @@ import (
 	"errors"
 	"maestro/internal/config"
 	"maestro/internal/integration/jira"
+	"maestro/internal/orchestrator"
 )
 
 type JobResolver struct {
-	JobTypes   map[string]config.JobType
+	jobTypes   map[string]config.JobType
 	jiraClient jira.JiraFieldReader
-	hmacSecret string
+	orch       orchestrator.Orchestrator
+}
+
+func NewJobResolver(jiraClient jira.JiraFieldReader, jt map[string]config.JobType, orch orchestrator.Orchestrator) *JobResolver {
+	return &JobResolver{
+		jobTypes:   jt,
+		jiraClient: jiraClient,
+		orch:       orch,
+	}
 }
 
 func (jr *JobResolver) GetJobInfo(issueId string) (jira.JiraIssue, error) {
@@ -21,7 +30,7 @@ func (jr *JobResolver) ResolveJob(issue string) (config.JobType, error) {
 	if err != nil {
 		return config.JobType{}, err
 	}
-	for _, jt := range jr.JobTypes {
+	for _, jt := range jr.jobTypes {
 		if jt.JiraFields.System == issueJson.Fields.Sistema.Value {
 			if jt.JiraFields.Need == issueJson.Fields.Necessidade.Value {
 				for _, att := range issueJson.Fields.JiraAttachment {

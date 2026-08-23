@@ -39,7 +39,7 @@ func TestResolveJob(t *testing.T) {
 		}
 		jr := JobResolver{
 			jiraClient: fjr,
-			JobTypes:   map[string]config.JobType{},
+			jobTypes:   map[string]config.JobType{},
 		}
 		types, err := jr.ResolveJob("issue")
 		if err == nil {
@@ -70,7 +70,7 @@ func TestResolveJob(t *testing.T) {
 			t.Fatalf("Falha ao carregar tipos de jobs")
 		}
 		jr := JobResolver{
-			JobTypes: types,
+			jobTypes: types,
 			jiraClient: fakeJiraReader{
 				Issue: issue,
 				Err:   nil,

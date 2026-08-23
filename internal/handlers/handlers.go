@@ -41,6 +41,14 @@ func EnableCORS(next http.Handler) http.Handler {
 	})
 }
 
+func LoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Printf("Time: %s - Method: %s - URI: %s", time.Since(start), r.Method, r.URL)
+	})
+}
+
 type Backend struct {
 	Port         string
 	ID           int
@@ -54,6 +62,13 @@ type Backend struct {
 type Handler struct {
 	jr jobResolver.JobResolver
 	db repository.JobRepository
+}
+
+func NewHandler(jr jobResolver.JobResolver, db repository.JobRepository) *Handler {
+	return &Handler{
+		jr: jr,
+		db: db,
+	}
 }
 
 func (h *Handler) HandleJiraWebhook(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +104,8 @@ func (h *Handler) HandleJiraWebhook(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		if _, err := h.jr.ResolveJob(webhookBody.Issue.Key); err != nil {
 			log.Printf("Falha ao validar job %v: %v", webhookBody.Issue.Key, err)
+		} else {
+			log.Printf("Job até agora deu bom")
 		}
 	}()
 

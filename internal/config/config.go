@@ -11,7 +11,8 @@ import (
 )
 
 type Config struct {
-	API struct {
+	DemoMode bool `mapstructure:"demoMode"`
+	API      struct {
 		Name      string `mapstructure:"name"`
 		Namespace string `mapstructure:"namespace"`
 		Port      string `mapstructure:"port"`
