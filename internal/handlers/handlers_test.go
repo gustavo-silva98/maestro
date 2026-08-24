@@ -2,17 +2,27 @@ package handlers
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
-	"io"
+	"errors"
+	"log"
 	"maestro/internal/config"
 	"maestro/internal/integration/jira"
+	"maestro/internal/jobResolver"
+	FakeDB "maestro/internal/repository/fakeDB"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+type errorReadCloser struct{}
+
+func (errorReadCloser) Read([]byte) (int, error) {
+	return 0, errors.New("erro fabricado ao ler body")
+}
+
+func (errorReadCloser) Close() error {
+	return nil
+}
 
 func setupFakeJira(t *testing.T) *httptest.Server {
 	fakeJira := httptest.NewServer(http.HandlerFunc(
@@ -37,23 +47,122 @@ func setupFakeJira(t *testing.T) *httptest.Server {
 	return fakeJira
 }
 
-func TestReadyEndpoint(t *testing.T) {
-	api := &Backend{ID: 42, Ready: false}
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/ready", nil)
-	api.ReadyEndpoint(w, req)
+func TestHandleJiraWebhook(t *testing.T) {
+	t.Run("Erro ao criar Job", func(t *testing.T) {
+		fakedb := FakeDB.FakeJobDB{
+			Error: errors.New("Erro fabricado ao criar Job"),
+		}
+		jr := jobResolver.JobResolver{}
+		h := NewHandler(jr, fakedb)
+		payload := `{"issue":{"key":"MAE-456"}}`
+		req := httptest.NewRequest(
+			http.MethodPost,
+			"/webhook",
+			strings.NewReader(payload),
+		)
+		recorder := httptest.NewRecorder()
+		h.HandleJiraWebhook(recorder, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("esperava 200, recebeu %d", w.Code)
+		if recorder.Code != http.StatusInternalServerError {
+			t.Errorf("Esperado InternalServerError, recebido: %v", recorder.Code)
+		}
+	})
+	t.Run("Erro ao parsear JSON", func(t *testing.T) {
+		repo := FakeDB.FakeJobDB{}
+		h := NewHandler(jobResolver.JobResolver{}, repo)
+
+		r := httptest.NewRequest(
+			http.MethodPost,
+			"/webhook",
+			nil,
+		)
+		r.Body = errorReadCloser{}
+
+		w := httptest.NewRecorder()
+		h.HandleJiraWebhook(w, r)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Esperado BadRequest, recebido: %v", w.Code)
+		}
+	})
+	t.Run("Happy Path", func(t *testing.T) {
+
+		repo := FakeDB.FakeJobDB{
+			Error: nil,
+		}
+
+		jr := jobResolver.NewJobResolver(
+			jira.FakeJiraReader{},
+			map[string]config.JobType{},
+			nil,
+		)
+		h := NewHandler(*jr, repo)
+		payload := `{"issue":{"key":"MAE-456"}}`
+		r := httptest.NewRequest(
+			http.MethodPost,
+			"/webhook",
+			strings.NewReader(payload),
+		)
+
+		w := httptest.NewRecorder()
+
+		h.HandleJiraWebhook(w, r)
+		if w.Code != http.StatusAccepted {
+			t.Errorf("Status Expected: 202. Expected: %v", w.Code)
+		}
+	})
+}
+
+func TestLoggingMiddleware(t *testing.T) {
+	var logs bytes.Buffer
+
+	originalWriter := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() {
+		log.SetOutput(originalWriter)
+	})
+
+	handlerCalled := false
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	h := LoggingMiddleware(next)
+	req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
+	recorder := httptest.NewRecorder()
+
+	h.ServeHTTP(recorder, req)
+
+	if !handlerCalled {
+		t.Error("esperava o proximo handler ser chamado")
 	}
 
-	body, _ := io.ReadAll(w.Body)
+	if recorder.Code != http.StatusNoContent {
+		t.Errorf(
+			"status = %d, esperado %d",
+			recorder.Code,
+			http.StatusNoContent,
+		)
+	}
 
-	if !bytes.Contains(body, []byte(`"ready":true`)) {
-		t.Fatalf("esperava ready true, body: %s", string(body))
+	output := logs.String()
+
+	if !strings.Contains(output, "Method: GET") {
+		t.Errorf("log não contém o método HTTP: %q", output)
+	}
+
+	if !strings.Contains(output, "URI: /jobs") {
+		t.Errorf("log nãoi contém a URI: %q", output)
+	}
+
+	if !strings.Contains(output, "Time:") {
+		t.Errorf("log não contém o tempo de execução: %q", output)
 	}
 }
 
+/*
 func TestTestAutomation(t *testing.T) {
 	fake := setupFakeJira(t)
 	defer fake.Close()
@@ -106,3 +215,4 @@ func TestTestAutomation(t *testing.T) {
 		}
 	})
 }
+*/

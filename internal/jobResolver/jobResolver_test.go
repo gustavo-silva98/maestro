@@ -1,8 +1,10 @@
 package jobResolver
 
 import (
+	"context"
 	"errors"
 	"maestro/internal/config"
+	"maestro/internal/domain"
 	"maestro/internal/integration/jira"
 	"path/filepath"
 	"runtime"
@@ -12,6 +14,25 @@ import (
 type fakeJiraReader struct {
 	Issue jira.JiraIssue
 	Err   error
+}
+
+type fakeOrchestrator struct {
+	called       bool
+	receivedJob  domain.Job
+	receivedType config.JobType
+	err          error
+}
+
+func (fo *fakeOrchestrator) ExecuteJob(
+	ctx context.Context,
+	job domain.Job,
+	jt config.JobType,
+) (domain.Job, error) {
+	fo.called = true
+	fo.receivedJob = job
+	fo.receivedType = jt
+
+	return job, fo.err
 }
 
 func (fjr fakeJiraReader) GetIssue(issueId string) (jira.JiraIssue, error) {
@@ -39,7 +60,7 @@ func TestResolveJob(t *testing.T) {
 		}
 		jr := JobResolver{
 			jiraClient: fjr,
-			JobTypes:   map[string]config.JobType{},
+			jobTypes:   map[string]config.JobType{},
 		}
 		types, err := jr.ResolveJob("issue")
 		if err == nil {
@@ -70,7 +91,7 @@ func TestResolveJob(t *testing.T) {
 			t.Fatalf("Falha ao carregar tipos de jobs")
 		}
 		jr := JobResolver{
-			JobTypes: types,
+			jobTypes: types,
 			jiraClient: fakeJiraReader{
 				Issue: issue,
 				Err:   nil,
@@ -91,6 +112,108 @@ func TestResolveJob(t *testing.T) {
 		}
 	})
 
+}
+func TestDispatchJob(t *testing.T) {
+
+	jobType := config.JobType{
+		JobType: "football",
+	}
+	jobType.JiraFields.System = "Sistema"
+	jobType.JiraFields.Need = "Necessidade"
+	jobType.JiraFields.AttachmentFilename = "input.csv"
+
+	issue := jira.JiraIssue{
+		Fields: jira.JiraIssueFields{
+			Sistema:     jira.JiraCustomField{Value: "Sistema"},
+			Necessidade: jira.JiraCustomField{Value: "Necessidade"},
+			JiraAttachment: []jira.JiraAttachment{
+				{Filename: "input.csv"},
+			},
+		},
+	}
+	t.Run("Falha no ResolveJob", func(t *testing.T) {
+		fjr := jira.FakeJiraReader{
+			Issue: jira.JiraIssue{},
+			Err:   errors.New("Erro fabricado pro teste"),
+		}
+		jr := JobResolver{
+			jiraClient: fjr,
+		}
+		job := domain.Job{IssueKey: "issue"}
+		err := jr.DispatchJob(context.Background(), job)
+		if err == nil {
+			t.Error("Falha ao gerar erro Dispatch Job")
+		}
+	})
+	t.Run("Despacha job com sucesso", func(t *testing.T) {
+		orch := &fakeOrchestrator{}
+
+		jr := JobResolver{
+			jiraClient: fakeJiraReader{Issue: issue},
+			jobTypes: map[string]config.JobType{
+				jobType.JobType: jobType,
+			},
+			orch: orch,
+		}
+
+		job := domain.Job{
+			ID:       "job-1",
+			IssueKey: "PROJ-1",
+		}
+
+		err := jr.DispatchJob(context.Background(), job)
+		if err != nil {
+			t.Fatalf("não esperava erro: %v", err)
+		}
+
+		if !orch.called {
+			t.Fatal("esperava que o orquestrador fosse chamado")
+		}
+
+		if orch.receivedJob.Type != "football" {
+			t.Errorf("Type recebido: %q, esperado %q",
+				orch.receivedJob.Type, "football")
+		}
+
+		if orch.receivedJob.InputFile != "input.csv" {
+			t.Errorf("InputFile recebido: %q, esperado %q",
+				orch.receivedJob.InputFile, "input.csv")
+		}
+
+		if orch.receivedJob.IssueKey != "PROJ-1" {
+			t.Errorf("IssueKey recebido: %q, esperado %q",
+				orch.receivedJob.IssueKey, "PROJ-1")
+		}
+
+		if orch.receivedType.JobType != "football" {
+			t.Errorf("JobType recebido: %q, esperado %q",
+				orch.receivedType.JobType, "football")
+		}
+	})
+	t.Run("Propaga erro do orquestrador", func(t *testing.T) {
+		expectedErr := errors.New("erro ao executar job")
+		orch := &fakeOrchestrator{err: expectedErr}
+
+		jr := JobResolver{
+			jiraClient: fakeJiraReader{Issue: issue},
+			jobTypes: map[string]config.JobType{
+				jobType.JobType: jobType,
+			},
+			orch: orch,
+		}
+
+		err := jr.DispatchJob(context.Background(), domain.Job{
+			IssueKey: "PROJ-1",
+		})
+
+		if !errors.Is(err, expectedErr) {
+			t.Errorf("erro recebido: %v, esperado: %v", err, expectedErr)
+		}
+
+		if !orch.called {
+			t.Fatal("esperava que o orquestrador fosse chamado")
+		}
+	})
 }
 
 func testDataDir(_ *testing.T) (string, error) {

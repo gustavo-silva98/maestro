@@ -2,87 +2,91 @@ package orchestrator
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"maestro/internal/config"
 	"maestro/internal/domain"
 	"maestro/internal/executor"
 	"maestro/internal/repository"
-	"os"
 	"os/exec"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Orchestrator interface {
-	ExecuteJob(result ExecutionResult) (ExecutionResult, error)
+	ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType) (domain.Job, error)
 }
 
-type ExecutionResult struct {
-	JobID     string
-	Status    string
-	ExitCode  int
-	StartedAt time.Time
-	EndedAt   time.Time
-	Logs      []byte          // stderr do container
-	Payload   json.RawMessage // stdout do Python — preservado como-está
-	Job       domain.Job
-	Task      domain.Task
-}
-
-type FootballOrchestrator struct {
-	DB       repository.JobRepository
+type JobOrchestrator struct {
+	DB       repository.JobTaskRepo
 	Executor executor.Executor
+	BaseDir  string
 }
 
-func (f *FootballOrchestrator) ExecuteJob(result ExecutionResult) (ExecutionResult, error) {
-	ctx := context.Background()
-	if err := f.DB.SetJobPending(ctx, result.Job); err != nil {
-		return ExecutionResult{}, err
+func (jo *JobOrchestrator) ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType) (domain.Job, error) {
+	if err := jo.DB.SetJobPending(ctx, job); err != nil {
+		return job, fmt.Errorf("falha o setar job como pending: %v", err)
 	}
-	inputFile, outputDir, err := buildVolumes(result.Job.IssueKey)
-	if err != nil {
-		return ExecutionResult{}, fmt.Errorf("erro ao montar volumes: %w", err)
-	}
-	argsString := []string{"run", "--rm", "-v", inputFile, "-v", outputDir}
-	stdout, stderr, err := f.Executor.Execute(ctx, "docker", argsString)
 
-	result.EndedAt = time.Now()
-	result.Job.FinishedAt = result.EndedAt
-	result.Task.FinishedAt = result.EndedAt
-	result.Payload = stdout
-	result.Logs = stderr
-
+	task, err := jo.runTask(ctx, job.ID, jt, job.ItemCount)
 	if err != nil {
-		result.Status = "Failed"
-		result.ExitCode = 1
-		var exitErr *exec.ExitError
-		// Se o processo retornou exit code != 0
-		if errors.As(err, &exitErr) {
-			result.ExitCode = exitErr.ExitCode()
+		job.Status = domain.StatusFailed
+		job.FinishedAt = time.Now()
+		if dbErr := jo.DB.SetJobFailed(ctx, job); dbErr != nil {
+			return job, fmt.Errorf("job falhou e não foi possível persistir: %w", dbErr)
 		}
-		return result, fmt.Errorf(
-			"erro ao executar football-rpa (exit code %d): %w\nstderr: %s",
-			result.ExitCode,
-			err,
-			result.Logs,
+		return job, fmt.Errorf("job falhou e não foi possível executar a task: %v", err)
+	}
+	if dbErr := jo.DB.CreateTask(ctx, task); dbErr != nil {
+		return domain.Job{}, fmt.Errorf("erro ao persistir task: %w", dbErr)
+	}
+	job.Status = task.Status
+	job.FinishedAt = task.FinishedAt
+	if err := jo.DB.FinishJob(ctx, job); err != nil {
+		return domain.Job{}, err
+	}
+	return job, nil
+}
+
+func buildVolumes(baseDir, scriptsDir, jobID string) (string, string) {
+	inputFile := fmt.Sprintf("%s/%s/input-%s.csv:/app/input-%s.csv", baseDir, scriptsDir, jobID, jobID)
+	outputDir := fmt.Sprintf("%s/%s/output-%s:/app/output-%s", baseDir, scriptsDir, jobID, jobID)
+
+	return inputFile, outputDir
+}
+
+func (jo *JobOrchestrator) runTask(ctx context.Context, jobID string, jt config.JobType, itemCount int) (domain.Task, error) {
+	inputFile, outputDir := buildVolumes(jo.BaseDir, jt.Container.ContainerDir, jobID)
+	createdDate := time.Now()
+	args := []string{"run", "--rm", "-v", inputFile, "-v", outputDir, jt.Container.ImageName}
+	stdout, stderr, err := jo.Executor.Execute(ctx, "docker", args)
+
+	task := domain.Task{
+		ID:           uuid.New().String(),
+		JobID:        jobID,
+		Image:        jt.Container.ImageName,
+		Payload:      stdout,
+		Logs:         stderr,
+		TaskType:     jt.JobType,
+		SavedMinutes: jt.Indicators.TimeSaved * itemCount,
+		CreatedAt:    createdDate,
+		FinishedAt:   time.Now(),
+	}
+
+	if err != nil {
+		task.Status = domain.StatusFailed
+		task.ExitCode = 1
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			task.ExitCode = exitErr.ExitCode()
+		}
+		return task, fmt.Errorf(
+			"erro ao executar %s (exit code %d): %w\nstderr: %s",
+			jt.Container.ImageName, task.ExitCode, err, task.Logs,
 		)
 	}
-	result.Status = "Success"
-	result.ExitCode = 0
-	if err := f.DB.FinishJob(ctx, result.Job); err != nil {
-		return ExecutionResult{}, err
-	}
-	return result, nil
-}
-
-func buildVolumes(jobID string) (string, string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", "", err
-	}
-
-	inputFile := fmt.Sprintf("%s/scripts/football/input-%s.csv:/app/input-%s.csv", cwd, jobID, jobID)
-	outputDir := fmt.Sprintf("%s/scripts/football/output-%s:/app/Prints-%s", cwd, jobID, jobID)
-
-	return inputFile, outputDir, nil
+	task.Status = domain.StatusSuccess
+	task.ExitCode = 0
+	return task, nil
 }

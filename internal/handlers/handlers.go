@@ -14,15 +14,14 @@ import (
 	"maestro/internal/config"
 	"maestro/internal/domain"
 	"maestro/internal/integration/jira"
+	"maestro/internal/jobResolver"
 	"maestro/internal/orchestrator"
 	"maestro/internal/repository"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
 )
 
@@ -42,14 +41,74 @@ func EnableCORS(next http.Handler) http.Handler {
 	})
 }
 
+func LoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Printf("Time: %s - Method: %s - URI: %s", time.Since(start), r.Method, r.URL)
+	})
+}
+
 type Backend struct {
 	Port         string
 	ID           int
 	Ready        bool
 	JiraApi      *jira.JiraIntegration
 	Config       *config.Config
-	DB           repository.MaestroRepository
 	Orchestrator orchestrator.Orchestrator
+}
+
+type Handler struct {
+	jr *jobResolver.JobResolver
+	db repository.JobRepository
+}
+
+func NewHandler(jr jobResolver.JobResolver, db repository.JobRepository) *Handler {
+	return &Handler{
+		jr: &jr,
+		db: db,
+	}
+}
+
+func (h *Handler) HandleJiraWebhook(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Falha ao ler Body: %v", err)
+		http.Error(w, "BadRequest", http.StatusBadRequest)
+		return
+	}
+
+	var webhookBody jira.JiraWebhookBody
+	if err := json.Unmarshal(body, &webhookBody); err != nil {
+		log.Printf("Erro em enfileirar job: %v", err)
+		http.Error(w, "Internal Error", http.StatusInternalServerError)
+		return
+	}
+
+	job := domain.Job{
+		ID:        uuid.New().String(),
+		CreatedAt: time.Now(),
+		IssueKey:  webhookBody.Issue.Key,
+		Status:    domain.StatusPending,
+	}
+
+	if err := h.db.CreateJob(r.Context(), job); err != nil {
+		log.Printf("Erro em decodificar body: %v", err)
+		http.Error(w, "Internal Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	go func() {
+		if err := h.jr.DispatchJob(context.Background(), job); err != nil {
+			log.Printf("Falha ao validar job %v: %v", webhookBody.Issue.Key, err)
+		} else {
+			log.Printf("Job até agora deu bom")
+		}
+	}()
+
 }
 
 type JobStatsResponse struct {
@@ -57,43 +116,32 @@ type JobStatsResponse struct {
 	StatusLast24h map[string]int `json:"statusLast24h"`
 }
 
-func (api *Backend) GetJobStatusCounts(w http.ResponseWriter, r *http.Request) {
-	statusCounts, err := api.DB.GetJobStatusCountsLast24h(r.Context())
-	if err != nil {
-		http.Error(w, "erro ao buscar contagem de status", http.StatusInternalServerError)
-		return
-	}
+func verifyHMAC(secret string) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				log.Println("Falha ao ler body da request")
+				http.Error(w, "erro ao ler body da request", http.StatusBadRequest)
+			}
+			r.Body = io.NopCloser(bytes.NewBuffer(body))
 
-	totalJobs, err := api.DB.GetTotalJobsCount(r.Context())
-	if err != nil {
-		http.Error(w, "erro ao buscar total de jobs", http.StatusInternalServerError)
-		return
-	}
+			mac := hmac.New(sha256.New, []byte(secret))
+			mac.Write(body)
+			expected := hex.EncodeToString(mac.Sum(nil))
 
-	response := JobStatsResponse{
-		TotalJobs:     totalJobs,
-		StatusLast24h: statusCounts,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("erro ao serializar resposta de status: %v", err)
+			got := r.Header.Get("X-Hub-Signature-256")
+			if !hmac.Equal([]byte(got), []byte(expected)) {
+				log.Println("Assinatura inválida")
+				http.Error(w, "Falha na autenticação", http.StatusUnauthorized)
+				return
+			}
+			next(w, r)
+		}
 	}
 }
 
-func (api *Backend) ReadyEndpoint(w http.ResponseWriter, r *http.Request) {
-	api.Ready = true
-	resp := map[string]interface{}{
-		"apiId": api.ID,
-		"ready": api.Ready,
-	}
-	jsonData, err := sonic.Marshal(resp)
-	if err != nil {
-		log.Fatal(err)
-	}
-	w.Write(jsonData)
-}
-
+/*
 func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
@@ -137,13 +185,13 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		ctx := context.Background()
 		job := domain.Job{
-			ID:          uuid.NewString(),
-			IssueKey:    issue,
-			TentantName: api.Config.Jira.TenantName,
-			Status:      "Running",
-			CreatedAt:   time.Now().UTC(),
-			FinishedAt:  time.Now().UTC(),
-			JobType:     "Futebol",
+			ID:         uuid.NewString(),
+			IssueKey:   issue,
+			TenantName: api.Config.Jira.TenantName,
+			Status:     "Running",
+			CreatedAt:  time.Now().UTC(),
+			FinishedAt: time.Now().UTC(),
+			Type:       "Futebol",
 		}
 		task := domain.Task{
 			ID:         uuid.NewString(),
@@ -205,7 +253,7 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 			log.Printf("ERRO no job %s: Falha ao comentar chamado: %v", job.ID, err)
 			return
 		}
-		job.SavedMinutes = float64(countLinesFast(attachment) - 1)
+		task.SavedMinutes = countLinesFast(attachment) - 1
 		if err := api.DB.CreateJob(ctx, job); err != nil {
 			log.Printf("ERRO no job %s: erro ao criar Job %v", job.ID, err)
 		} else {
@@ -218,13 +266,6 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 			log.Printf("task criada para JobId %v", task.JobID)
 		}
 
-		execution := orchestrator.ExecutionResult{
-			JobID:     job.ID,
-			StartedAt: time.Now().UTC(),
-			Job:       job,
-			Task:      task,
-		}
-
 		log.Printf("Iniciando execução do Job %s", job.ID)
 		if err := api.DB.SetJobRunning(ctx, job); err != nil {
 			log.Printf("ERRO no job %s: erro ao setar job running: %v", job.ID, err)
@@ -232,7 +273,7 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// A execução longa acontece aqui
-		_, err = api.Orchestrator.ExecuteJob(execution)
+		_, err = api.Orchestrator.ExecuteJob()
 		if err != nil {
 			log.Printf("ERRO na execução do Job %s: %v", job.ID, err)
 			// Aqui você poderia implementar uma lógica para marcar o job como "Failed"
@@ -282,18 +323,7 @@ func (api *Backend) TestAutomation(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Job %s finalizado com sucesso.", job.ID)
 	}() // A `()` no final executa a função anônima
 }
-
-func checkHmac(secret, received string, data []byte) bool {
-	hash := hmac.New(sha256.New, []byte(secret))
-	hash.Write([]byte(data))
-	expected := hash.Sum(nil)
-
-	receivedHex, err := hex.DecodeString(received)
-	if err != nil {
-		return false
-	}
-	return hmac.Equal(expected, []byte(receivedHex))
-}
+*/
 
 func ZipFolder(srcDir, destZipPath string) error {
 	// Garante que o diretório de origem existe
@@ -363,16 +393,6 @@ func ZipFolder(srcDir, destZipPath string) error {
 	})
 }
 
-func (api *Backend) GetJobs(w http.ResponseWriter, r *http.Request) {
-	jobs, err := api.DB.GetJobs(r.Context(), 50)
-	if err != nil {
-		http.Error(w, "erro ao buscar jobs", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(jobs)
-}
-
 func countLinesFast(b []byte) int {
 	if len(b) == 0 {
 		return 0
@@ -382,29 +402,4 @@ func countLinesFast(b []byte) int {
 		n++
 	}
 	return n
-}
-
-func (api *Backend) DeleteTables(w http.ResponseWriter, r *http.Request) {
-	if err := api.DB.ClearTables(r.Context()); err != nil {
-		http.Error(w, "erro ao deletar tabelas", http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-func (api *Backend) GetSavedMinutes(w http.ResponseWriter, r *http.Request) {
-	minutes, err := api.DB.GetSavedMinutes(r.Context())
-	if err != nil {
-		http.Error(w, "erro ao consultar tempo economizado", http.StatusInternalServerError)
-		return
-	}
-	resp := map[string]float64{
-		"savedMinutes": minutes,
-	}
-	jsonData, err := sonic.Marshal(resp)
-	if err != nil {
-		http.Error(w, "erro ao serializar resposta", http.StatusInternalServerError)
-		return
-	}
-	w.Write(jsonData)
 }
