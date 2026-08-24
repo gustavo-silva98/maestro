@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"errors"
-	"io"
 	"log"
 	"maestro/internal/config"
 	"maestro/internal/integration/jira"
@@ -46,23 +45,6 @@ func setupFakeJira(t *testing.T) *httptest.Server {
 		}))
 	t.Cleanup(fakeJira.Close)
 	return fakeJira
-}
-
-func TestReadyEndpoint(t *testing.T) {
-	api := &Backend{ID: 42, Ready: false}
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/ready", nil)
-	api.ReadyEndpoint(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("esperava 200, recebeu %d", w.Code)
-	}
-
-	body, _ := io.ReadAll(w.Body)
-
-	if !bytes.Contains(body, []byte(`"ready":true`)) {
-		t.Fatalf("esperava ready true, body: %s", string(body))
-	}
 }
 
 func TestHandleJiraWebhook(t *testing.T) {

@@ -38,7 +38,7 @@ func main() {
 				Fields: jira.JiraIssueFields{
 					Sistema:        jira.JiraCustomField{Value: "Sistema"},
 					Necessidade:    jira.JiraCustomField{Value: "Necessidade"},
-					JiraAttachment: []jira.JiraAttachment{jira.JiraAttachment{Filename: "NomeDoAnexo.csv"}},
+					JiraAttachment: []jira.JiraAttachment{{Filename: "NomeDoAnexo.csv"}},
 				},
 			},
 		}

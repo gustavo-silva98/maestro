@@ -22,7 +22,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
 )
 
@@ -56,7 +55,6 @@ type Backend struct {
 	Ready        bool
 	JiraApi      *jira.JiraIntegration
 	Config       *config.Config
-	DB           repository.MaestroRepository
 	Orchestrator orchestrator.Orchestrator
 }
 
@@ -116,19 +114,6 @@ func (h *Handler) HandleJiraWebhook(w http.ResponseWriter, r *http.Request) {
 type JobStatsResponse struct {
 	TotalJobs     int            `json:"totalJobs"`
 	StatusLast24h map[string]int `json:"statusLast24h"`
-}
-
-func (api *Backend) ReadyEndpoint(w http.ResponseWriter, r *http.Request) {
-	api.Ready = true
-	resp := map[string]interface{}{
-		"apiId": api.ID,
-		"ready": api.Ready,
-	}
-	jsonData, err := sonic.Marshal(resp)
-	if err != nil {
-		log.Fatal(err)
-	}
-	w.Write(jsonData)
 }
 
 func verifyHMAC(secret string) func(http.HandlerFunc) http.HandlerFunc {
@@ -408,16 +393,6 @@ func ZipFolder(srcDir, destZipPath string) error {
 	})
 }
 
-func (api *Backend) GetJobs(w http.ResponseWriter, r *http.Request) {
-	jobs, err := api.DB.GetJobs(r.Context(), 50)
-	if err != nil {
-		http.Error(w, "erro ao buscar jobs", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(jobs)
-}
-
 func countLinesFast(b []byte) int {
 	if len(b) == 0 {
 		return 0
@@ -427,29 +402,4 @@ func countLinesFast(b []byte) int {
 		n++
 	}
 	return n
-}
-
-func (api *Backend) DeleteTables(w http.ResponseWriter, r *http.Request) {
-	if err := api.DB.ClearTables(r.Context()); err != nil {
-		http.Error(w, "erro ao deletar tabelas", http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-func (api *Backend) GetSavedMinutes(w http.ResponseWriter, r *http.Request) {
-	minutes, err := api.DB.GetSavedMinutes(r.Context())
-	if err != nil {
-		http.Error(w, "erro ao consultar tempo economizado", http.StatusInternalServerError)
-		return
-	}
-	resp := map[string]float64{
-		"savedMinutes": minutes,
-	}
-	jsonData, err := sonic.Marshal(resp)
-	if err != nil {
-		http.Error(w, "erro ao serializar resposta", http.StatusInternalServerError)
-		return
-	}
-	w.Write(jsonData)
 }
