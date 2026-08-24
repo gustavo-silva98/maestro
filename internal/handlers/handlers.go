@@ -3,6 +3,7 @@ package handlers
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -60,13 +61,13 @@ type Backend struct {
 }
 
 type Handler struct {
-	jr jobResolver.JobResolver
+	jr *jobResolver.JobResolver
 	db repository.JobRepository
 }
 
 func NewHandler(jr jobResolver.JobResolver, db repository.JobRepository) *Handler {
 	return &Handler{
-		jr: jr,
+		jr: &jr,
 		db: db,
 	}
 }
@@ -103,7 +104,7 @@ func (h *Handler) HandleJiraWebhook(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusAccepted)
 	go func() {
-		if err := h.jr.DispatchJob(r.Context(), job); err != nil {
+		if err := h.jr.DispatchJob(context.Background(), job); err != nil {
 			log.Printf("Falha ao validar job %v: %v", webhookBody.Issue.Key, err)
 		} else {
 			log.Printf("Job até agora deu bom")
@@ -115,30 +116,6 @@ func (h *Handler) HandleJiraWebhook(w http.ResponseWriter, r *http.Request) {
 type JobStatsResponse struct {
 	TotalJobs     int            `json:"totalJobs"`
 	StatusLast24h map[string]int `json:"statusLast24h"`
-}
-
-func (api *Backend) GetJobStatusCounts(w http.ResponseWriter, r *http.Request) {
-	statusCounts, err := api.DB.GetJobStatusCountsLast24h(r.Context())
-	if err != nil {
-		http.Error(w, "erro ao buscar contagem de status", http.StatusInternalServerError)
-		return
-	}
-
-	totalJobs, err := api.DB.GetTotalJobsCount(r.Context())
-	if err != nil {
-		http.Error(w, "erro ao buscar total de jobs", http.StatusInternalServerError)
-		return
-	}
-
-	response := JobStatsResponse{
-		TotalJobs:     totalJobs,
-		StatusLast24h: statusCounts,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("erro ao serializar resposta de status: %v", err)
-	}
 }
 
 func (api *Backend) ReadyEndpoint(w http.ResponseWriter, r *http.Request) {
