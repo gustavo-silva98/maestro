@@ -92,6 +92,7 @@ func (h *Handler) HandleJiraWebhook(w http.ResponseWriter, r *http.Request) {
 		ID:        uuid.New().String(),
 		CreatedAt: time.Now(),
 		IssueKey:  webhookBody.Issue.Key,
+		Status:    domain.StatusPending,
 	}
 
 	if err := h.db.CreateJob(r.Context(), job); err != nil {
@@ -102,7 +103,7 @@ func (h *Handler) HandleJiraWebhook(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusAccepted)
 	go func() {
-		if _, err := h.jr.ResolveJob(webhookBody.Issue.Key); err != nil {
+		if err := h.jr.DispatchJob(r.Context(), job); err != nil {
 			log.Printf("Falha ao validar job %v: %v", webhookBody.Issue.Key, err)
 		} else {
 			log.Printf("Job até agora deu bom")

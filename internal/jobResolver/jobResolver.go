@@ -1,8 +1,11 @@
 package jobResolver
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"maestro/internal/config"
+	"maestro/internal/domain"
 	"maestro/internal/integration/jira"
 	"maestro/internal/orchestrator"
 )
@@ -42,4 +45,17 @@ func (jr *JobResolver) ResolveJob(issue string) (config.JobType, error) {
 		}
 	}
 	return config.JobType{}, errors.New("Nenhum job identificado")
+}
+
+func (jr *JobResolver) DispatchJob(ctx context.Context, job domain.Job) error {
+	jobType, err := jr.ResolveJob(job.IssueKey)
+	if err != nil {
+		return fmt.Errorf("Erro ao achar tipo de job: %v", err)
+	}
+	job.Type = jobType.JobType
+	job.InputFile = jobType.JiraFields.AttachmentFilename
+	// Implementar a definição de ItemCount
+
+	_, err = jr.orch.ExecuteJob(ctx, job, jobType)
+	return err
 }

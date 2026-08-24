@@ -1,8 +1,10 @@
 package jobResolver
 
 import (
+	"context"
 	"errors"
 	"maestro/internal/config"
+	"maestro/internal/domain"
 	"maestro/internal/integration/jira"
 	"path/filepath"
 	"runtime"
@@ -91,6 +93,22 @@ func TestResolveJob(t *testing.T) {
 		}
 	})
 
+}
+func TestDispatchJob(t *testing.T) {
+	t.Run("Falha no ResolveJob", func(t *testing.T) {
+		fjr := jira.FakeJiraReader{
+			Issue: jira.JiraIssue{},
+			Err:   errors.New("Erro fabricado pro teste"),
+		}
+		jr := JobResolver{
+			jiraClient: fjr,
+		}
+		job := domain.Job{IssueKey: "issue"}
+		err := jr.DispatchJob(context.Background(), job)
+		if err == nil {
+			t.Error("Falha ao gerar erro Dispatch Job")
+		}
+	})
 }
 
 func testDataDir(_ *testing.T) (string, error) {
