@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"log"
 	"maestro/internal/config"
 	"maestro/internal/integration/jira"
 	"maestro/internal/jobResolver"
@@ -128,6 +129,55 @@ func TestHandleJiraWebhook(t *testing.T) {
 			t.Errorf("Status Expected: 202. Expected: %v", w.Code)
 		}
 	})
+}
+
+func TestLoggingMiddleware(t *testing.T) {
+	var logs bytes.Buffer
+
+	originalWriter := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() {
+		log.SetOutput(originalWriter)
+	})
+
+	handlerCalled := false
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	h := LoggingMiddleware(next)
+	req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
+	recorder := httptest.NewRecorder()
+
+	h.ServeHTTP(recorder, req)
+
+	if !handlerCalled {
+		t.Error("esperava o proximo handler ser chamado")
+	}
+
+	if recorder.Code != http.StatusNoContent {
+		t.Errorf(
+			"status = %d, esperado %d",
+			recorder.Code,
+			http.StatusNoContent,
+		)
+	}
+
+	output := logs.String()
+
+	if !strings.Contains(output, "Method: GET") {
+		t.Errorf("log não contém o método HTTP: %q", output)
+	}
+
+	if !strings.Contains(output, "URI: /jobs") {
+		t.Errorf("log nãoi contém a URI: %q", output)
+	}
+
+	if !strings.Contains(output, "Time:") {
+		t.Errorf("log não contém o tempo de execução: %q", output)
+	}
 }
 
 /*
