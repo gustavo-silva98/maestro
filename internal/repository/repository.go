@@ -5,7 +5,12 @@ import (
 	"maestro/internal/domain"
 )
 
-// Refatorar essa interface urgente
+type RepositoryError string
+
+const (
+	DuplicateError RepositoryError = "Duplicate error"
+	NotFoundError  RepositoryError = "Element not Found on DB"
+)
 
 type JobRepository interface {
 	CreateJob(ctx context.Context, job domain.Job) error
