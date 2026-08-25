@@ -22,6 +22,16 @@ type JobOrchestrator struct {
 	DB       repository.JobTaskRepo
 	Executor executor.Executor
 	BaseDir  string
+	sem      chan struct{} //Limitador de tasks concorrentes
+}
+
+func NewJobOrchestrator(db repository.JobTaskRepo, exe executor.Executor, dir string, sem *chan struct{}) *JobOrchestrator {
+	return &JobOrchestrator{
+		DB:       db,
+		Executor: exe,
+		BaseDir:  dir,
+		sem:      *sem,
+	}
 }
 
 func (jo *JobOrchestrator) ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType) (domain.Job, error) {
@@ -57,6 +67,9 @@ func buildVolumes(baseDir, scriptsDir, jobID string) (string, string) {
 }
 
 func (jo *JobOrchestrator) runTask(ctx context.Context, jobID string, jt config.JobType, itemCount int) (domain.Task, error) {
+	jo.sem <- struct{}{}
+	defer func() { <-jo.sem }()
+
 	inputFile, outputDir := buildVolumes(jo.BaseDir, jt.Container.ContainerDir, jobID)
 	createdDate := time.Now()
 	args := []string{"run", "--rm", "-v", inputFile, "-v", outputDir, jt.Container.ImageName}
