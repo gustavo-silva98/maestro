@@ -8,7 +8,9 @@ import (
 	"maestro/internal/domain"
 	"maestro/internal/executor"
 	"maestro/internal/repository"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,6 +37,30 @@ func NewJobOrchestrator(db repository.JobTaskRepo, exe executor.Executor, dir st
 }
 
 func (jo *JobOrchestrator) ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType, inputBytes []byte) (domain.Job, error) {
+	inputPath := filepath.Join(
+		jo.BaseDir,
+		jt.Container.ContainerDir,
+		"input-"+job.ID+".csv",
+	)
+	defer os.Remove(inputPath)
+
+	if err := os.MkdirAll(filepath.Dir(inputPath), 0755); err != nil {
+		return job, fmt.Errorf("erro ao criar diretório do input: %w", err)
+	}
+	if err := os.WriteFile(inputPath, inputBytes, 0644); err != nil {
+		return job, fmt.Errorf("erro ao salvar input: %w", err)
+	}
+
+	outputPath := filepath.Join(
+		jo.BaseDir,
+		jt.Container.ContainerDir,
+		"output-"+job.ID,
+	)
+	defer os.RemoveAll(outputPath)
+	if err := os.MkdirAll(outputPath, 0755); err != nil {
+		return job, fmt.Errorf("erro ao criar diretório de output: %w", err)
+	}
+
 	if err := jo.DB.SetJobPending(ctx, job); err != nil {
 		return job, fmt.Errorf("falha o setar job como pending: %v", err)
 	}
@@ -60,8 +86,8 @@ func (jo *JobOrchestrator) ExecuteJob(ctx context.Context, job domain.Job, jt co
 }
 
 func buildVolumes(baseDir, scriptsDir, jobID string) (string, string) {
-	inputFile := fmt.Sprintf("%s/%s/input-%s.csv:/app/input-%s.csv", baseDir, scriptsDir, jobID, jobID)
-	outputDir := fmt.Sprintf("%s/%s/output-%s:/app/output-%s", baseDir, scriptsDir, jobID, jobID)
+	inputFile := fmt.Sprintf("%s/%s/input-%s.csv:/app/input.csv", baseDir, scriptsDir, jobID)
+	outputDir := fmt.Sprintf("%s/%s/output-%s:/app/Prints", baseDir, scriptsDir, jobID)
 
 	return inputFile, outputDir
 }

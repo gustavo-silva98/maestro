@@ -35,7 +35,7 @@ func main() {
 		log.Fatalf("Concurrent Jobs deve ser maior que 0: %v", cfg.API.ConcurrentJobs)
 		return
 	}
-	path := filepath.Join(dir, "/config/jobTypes/")
+	path := filepath.Join(dir, "config", "jobTypes")
 	jobs, err := config.LoadJobTypes(path)
 	// Cenario DemoMode para teste de job template valido
 	if cfg.Mode == "test" {
@@ -50,7 +50,7 @@ func main() {
 				},
 			},
 		}
-		orch := orchestrator.NewJobOrchestrator(db, executor, "basedir", make(chan struct{}, cfg.API.ConcurrentJobs))
+		orch := orchestrator.NewJobOrchestrator(db, executor, dir, make(chan struct{}, cfg.API.ConcurrentJobs))
 		jobRes := jobResolver.NewJobResolver(jiraReader, jobs, orch)
 		h := handlers.NewHandler(*jobRes, db)
 		mux := http.NewServeMux()
@@ -71,18 +71,25 @@ func main() {
 			make(map[string]domain.Task),
 		)
 		exe := docker.Docker{}
+		inputPath := filepath.Join(dir, "scripts", "football", "input.csv")
+
+		inputBytes, err := os.ReadFile(inputPath)
+		if err != nil {
+			log.Fatal(err)
+		}
 		jiraReader := jira.FakeJiraReader{
 			Issue: jira.JiraIssue{
 				Fields: jira.JiraIssueFields{
-					Sistema:        jira.JiraCustomField{Value: "Sistema"},
-					Necessidade:    jira.JiraCustomField{Value: "Necessidade"},
-					JiraAttachment: []jira.JiraAttachment{{Filename: "NomeDoAnexo.csv"}},
+					Sistema:        jira.JiraCustomField{Value: "Transfermarket"},
+					Necessidade:    jira.JiraCustomField{Value: "Pesquisa"},
+					JiraAttachment: []jira.JiraAttachment{{ID: "FakeID", Filename: "Input.csv"}},
 				},
 			},
+			InputBytes: inputBytes,
 		}
 
 		sem := make(chan struct{}, cfg.API.ConcurrentJobs)
-		orch := orchestrator.NewJobOrchestrator(db, exe, "basedir", sem)
+		orch := orchestrator.NewJobOrchestrator(db, exe, dir, sem)
 		jobResolver := jobResolver.NewJobResolver(jiraReader, jobs, orch)
 		handler := handlers.NewHandler(*jobResolver, db)
 		queryHandler := handlers.NewQueryHandler(db)
