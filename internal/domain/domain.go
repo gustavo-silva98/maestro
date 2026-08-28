@@ -16,15 +16,15 @@ const (
 )
 
 type Job struct {
-	ID         string
-	IssueKey   string
-	TenantName string
-	Type       string
-	Status     Status
-	InputFile  string
-	ItemCount  int
-	CreatedAt  time.Time
-	FinishedAt time.Time
+	ID          string
+	IssueKey    string
+	TenantName  string
+	Type        string
+	Status      Status
+	InputFileId string
+	ItemCount   int
+	CreatedAt   time.Time
+	FinishedAt  time.Time
 }
 
 type Task struct {

@@ -15,7 +15,7 @@ import (
 )
 
 type Orchestrator interface {
-	ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType) (domain.Job, error)
+	ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType, inputBytes []byte) (domain.Job, error)
 }
 
 type JobOrchestrator struct {
@@ -34,7 +34,7 @@ func NewJobOrchestrator(db repository.JobTaskRepo, exe executor.Executor, dir st
 	}
 }
 
-func (jo *JobOrchestrator) ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType) (domain.Job, error) {
+func (jo *JobOrchestrator) ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType, inputBytes []byte) (domain.Job, error) {
 	if err := jo.DB.SetJobPending(ctx, job); err != nil {
 		return job, fmt.Errorf("falha o setar job como pending: %v", err)
 	}

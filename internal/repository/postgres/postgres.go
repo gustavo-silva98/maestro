@@ -53,9 +53,9 @@ func (p *Postgres) CreateTables(ctx context.Context) error {
 
 func (p *Postgres) CreateJob(ctx context.Context, job domain.Job) error {
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO jobs (id,issue_key,tenant_name,type,status,input_file,created_at, finished_at)
+		INSERT INTO jobs (id,issue_key,tenant_name,type,status,input_file_id,created_at, finished_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-	`, job.ID, job.IssueKey, job.TenantName, job.Type, job.Status, job.InputFile, job.CreatedAt, job.FinishedAt)
+	`, job.ID, job.IssueKey, job.TenantName, job.Type, job.Status, job.InputFileId, job.CreatedAt, job.FinishedAt)
 	return err
 }
 

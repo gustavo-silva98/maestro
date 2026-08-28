@@ -66,26 +66,27 @@ func TestExecuteJob(t *testing.T) {
 		}
 		now := time.Now()
 		result := domain.Job{
-			ID:         "id",
-			IssueKey:   "issueKey",
-			TenantName: "tenant",
-			Type:       "Type",
-			Status:     domain.StatusSuccess,
-			InputFile:  "inputFile",
-			ItemCount:  10,
-			CreatedAt:  now,
-			FinishedAt: now.Add(10 * time.Minute),
+			ID:          "id",
+			IssueKey:    "issueKey",
+			TenantName:  "tenant",
+			Type:        "Type",
+			Status:      domain.StatusSuccess,
+			InputFileId: "inputFileId",
+			ItemCount:   10,
+			CreatedAt:   now,
+			FinishedAt:  now.Add(10 * time.Minute),
 		}
 
 		orch := JobOrchestrator{
 			DB:       db,
 			Executor: exe,
 			BaseDir:  "baseDir",
+			sem:      make(chan struct{}, 5),
 		}
 		jt := config.JobType{
 			JobType: "jobType",
 		}
-		resultOut, err := orch.ExecuteJob(context.Background(), result, jt)
+		resultOut, err := orch.ExecuteJob(context.Background(), result, jt, []byte{})
 		if err != nil {
 			t.Fatalf("Erro ao testar ExecuteJob: %v", err)
 		}
@@ -111,26 +112,27 @@ func TestExecuteJob(t *testing.T) {
 		}
 		now := time.Now()
 		result := domain.Job{
-			ID:         "id",
-			IssueKey:   "issueKey",
-			TenantName: "tenant",
-			Type:       "Type",
-			Status:     domain.StatusSuccess,
-			InputFile:  "inputFile",
-			ItemCount:  10,
-			CreatedAt:  now,
-			FinishedAt: now.Add(10 * time.Minute),
+			ID:          "id",
+			IssueKey:    "issueKey",
+			TenantName:  "tenant",
+			Type:        "Type",
+			Status:      domain.StatusSuccess,
+			InputFileId: "inputFileId",
+			ItemCount:   10,
+			CreatedAt:   now,
+			FinishedAt:  now.Add(10 * time.Minute),
 		}
 
 		orch := JobOrchestrator{
 			DB:       db,
 			Executor: exe,
 			BaseDir:  "baseDir",
+			sem:      make(chan struct{}, 5),
 		}
 		jt := config.JobType{
 			JobType: "jobType",
 		}
-		_, err := orch.ExecuteJob(context.Background(), result, jt)
+		_, err := orch.ExecuteJob(context.Background(), result, jt, []byte{})
 		if err == nil {
 			t.Fatalf("Erro ao testar ExecuteJob: %v", err)
 		}
@@ -154,26 +156,27 @@ func TestExecuteJob(t *testing.T) {
 		}
 		now := time.Now()
 		result := domain.Job{
-			ID:         "id",
-			IssueKey:   "issueKey",
-			TenantName: "tenant",
-			Type:       "Type",
-			Status:     domain.StatusSuccess,
-			InputFile:  "inputFile",
-			ItemCount:  10,
-			CreatedAt:  now,
-			FinishedAt: now.Add(10 * time.Minute),
+			ID:          "id",
+			IssueKey:    "issueKey",
+			TenantName:  "tenant",
+			Type:        "Type",
+			Status:      domain.StatusSuccess,
+			InputFileId: "inputFileId",
+			ItemCount:   10,
+			CreatedAt:   now,
+			FinishedAt:  now.Add(10 * time.Minute),
 		}
 
 		orch := JobOrchestrator{
 			DB:       db,
 			Executor: exe,
 			BaseDir:  "baseDir",
+			sem:      make(chan struct{}, 5),
 		}
 		jt := config.JobType{
 			JobType: "jobType",
 		}
-		resultOut, err := orch.ExecuteJob(context.Background(), result, jt)
+		resultOut, err := orch.ExecuteJob(context.Background(), result, jt, []byte{})
 		if err == nil {
 			t.Fatalf("Erro ao testar ExecuteJob com erro: %v", err)
 		}

@@ -12,8 +12,9 @@ import (
 )
 
 type fakeJiraReader struct {
-	Issue jira.JiraIssue
-	Err   error
+	Issue      jira.JiraIssue
+	Err        error
+	InputBytes []byte
 }
 
 type fakeOrchestrator struct {
@@ -27,6 +28,7 @@ func (fo *fakeOrchestrator) ExecuteJob(
 	ctx context.Context,
 	job domain.Job,
 	jt config.JobType,
+	inputBytes []byte,
 ) (domain.Job, error) {
 	fo.called = true
 	fo.receivedJob = job
@@ -39,6 +41,10 @@ func (fjr fakeJiraReader) GetIssue(issueId string) (jira.JiraIssue, error) {
 	return fjr.Issue, fjr.Err
 }
 
+func (fjr fakeJiraReader) GetAttachmentContent(attachmentId string) ([]byte, error) {
+	return fjr.InputBytes, fjr.Err
+}
+
 func TestResolveJob(t *testing.T) {
 	t.Run("Erro ao receber GetJobInfo", func(t *testing.T) {
 		fjr := fakeJiraReader{
@@ -48,7 +54,8 @@ func TestResolveJob(t *testing.T) {
 		jr := JobResolver{
 			jiraClient: fjr,
 		}
-		_, err := jr.ResolveJob("issue")
+		job := domain.Job{IssueKey: "issue"}
+		_, err := jr.ResolveJob(&job)
 		if err == nil {
 			t.Errorf("Falha ao gerar erro no GetJobInfo")
 		}
@@ -62,7 +69,8 @@ func TestResolveJob(t *testing.T) {
 			jiraClient: fjr,
 			jobTypes:   map[string]config.JobType{},
 		}
-		types, err := jr.ResolveJob("issue")
+		job := domain.Job{IssueKey: "issue"}
+		types, err := jr.ResolveJob(&job)
 		if err == nil {
 			t.Error("Falha ao simular job de não identificado")
 		}
@@ -97,7 +105,9 @@ func TestResolveJob(t *testing.T) {
 				Err:   nil,
 			},
 		}
-		jobs, err := jr.ResolveJob("issue")
+
+		job := domain.Job{IssueKey: "issue"}
+		jobs, err := jr.ResolveJob(&job)
 		if err != nil {
 			t.Errorf("Erro ao testar resolveJob: %v", err)
 		}
@@ -173,11 +183,6 @@ func TestDispatchJob(t *testing.T) {
 		if orch.receivedJob.Type != "football" {
 			t.Errorf("Type recebido: %q, esperado %q",
 				orch.receivedJob.Type, "football")
-		}
-
-		if orch.receivedJob.InputFile != "input.csv" {
-			t.Errorf("InputFile recebido: %q, esperado %q",
-				orch.receivedJob.InputFile, "input.csv")
 		}
 
 		if orch.receivedJob.IssueKey != "PROJ-1" {

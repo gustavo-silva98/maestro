@@ -31,6 +31,10 @@ func main() {
 		log.Fatal(err)
 		return
 	}
+	if cfg.API.ConcurrentJobs <= 0 {
+		log.Fatalf("Concurrent Jobs deve ser maior que 0: %v", cfg.API.ConcurrentJobs)
+		return
+	}
 	path := filepath.Join(dir, "/config/jobTypes/")
 	jobs, err := config.LoadJobTypes(path)
 	// Cenario DemoMode para teste de job template valido
