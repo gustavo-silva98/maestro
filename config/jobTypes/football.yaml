@@ -6,8 +6,10 @@ jiraFields:
   answerCommentTemplate: "Modelo de resposta"
 
 container:
-    imageName: football-rpa
-    containerDir: scripts/football
+  imageName: football-rpa
+  containerDir: scripts/football
+  cpus: 0.5
+  memory: "512m"
 indicators:
   timePerOp: 60
   timeSaved: 60

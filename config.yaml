@@ -3,6 +3,7 @@ api:
   name: Maestro
   namespace: maestro
   port: 8080
+  concurrentJobs: 5
 
 jira:
   name: JiraIntegration

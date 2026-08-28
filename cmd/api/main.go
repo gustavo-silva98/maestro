@@ -42,12 +42,8 @@ func main() {
 				},
 			},
 		}
-		orch := orchestrator.JobOrchestrator{
-			DB:       db,
-			Executor: executor,
-			BaseDir:  "basedir",
-		}
-		jobRes := jobResolver.NewJobResolver(jiraReader, jobs, &orch)
+		orch := orchestrator.NewJobOrchestrator(db, executor, "basedir", make(chan struct{}, cfg.API.ConcurrentJobs))
+		jobRes := jobResolver.NewJobResolver(jiraReader, jobs, orch)
 		h := handlers.NewHandler(*jobRes, db)
 		mux := http.NewServeMux()
 		mux.HandleFunc("/jira-webhook", h.HandleJiraWebhook)

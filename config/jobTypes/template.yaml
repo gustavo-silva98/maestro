@@ -9,6 +9,8 @@ jiraFields:
 container:
   imageName: imageName
   containerDir: scripts/script
+  cpus: 0.5
+  memory: "512m"
 indicators:
   # Time Per Operation, ou seja, tempo da iteração por objeto de entrada. Medido em segundos.
   timePerOp: 60

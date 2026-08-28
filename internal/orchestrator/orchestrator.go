@@ -25,12 +25,12 @@ type JobOrchestrator struct {
 	sem      chan struct{} //Limitador de tasks concorrentes
 }
 
-func NewJobOrchestrator(db repository.JobTaskRepo, exe executor.Executor, dir string, sem *chan struct{}) *JobOrchestrator {
+func NewJobOrchestrator(db repository.JobTaskRepo, exe executor.Executor, dir string, sem chan struct{}) *JobOrchestrator {
 	return &JobOrchestrator{
 		DB:       db,
 		Executor: exe,
 		BaseDir:  dir,
-		sem:      *sem,
+		sem:      sem,
 	}
 }
 
@@ -72,7 +72,7 @@ func (jo *JobOrchestrator) runTask(ctx context.Context, jobID string, jt config.
 
 	inputFile, outputDir := buildVolumes(jo.BaseDir, jt.Container.ContainerDir, jobID)
 	createdDate := time.Now()
-	args := []string{"run", "--rm", "-v", inputFile, "-v", outputDir, jt.Container.ImageName}
+	args := []string{"run", "--rm", fmt.Sprintf("--memory=%v", jt.Container.Memory), fmt.Sprintf("--cpus=%v", jt.Container.Cpus), "-v", inputFile, "-v", outputDir, jt.Container.ImageName}
 	stdout, stderr, err := jo.Executor.Execute(ctx, "docker", args)
 
 	task := domain.Task{
