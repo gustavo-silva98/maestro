@@ -63,11 +63,29 @@ type Handler struct {
 	db repository.JobRepository
 }
 
+type QueryHandler struct {
+	db repository.QueryData
+}
+
+func NewQueryHandler(db repository.QueryData) *QueryHandler {
+	return &QueryHandler{db: db}
+}
+
 func NewHandler(jr jobResolver.JobResolver, db repository.JobRepository) *Handler {
 	return &Handler{
 		jr: &jr,
 		db: db,
 	}
+}
+
+func (h *QueryHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
+	jobs, err := h.db.ListJobs(r.Context())
+	if err != nil {
+		http.Error(w, "erro ao listar jobs", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(jobs)
 }
 
 func (h *Handler) HandleJiraWebhook(w http.ResponseWriter, r *http.Request) {

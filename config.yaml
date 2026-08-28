@@ -1,4 +1,4 @@
-demoMode: true
+mode: load
 api:
   name: Maestro
   namespace: maestro

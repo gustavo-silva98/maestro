@@ -3,15 +3,19 @@ package main
 import (
 	"log"
 	"maestro/internal/config"
+	"maestro/internal/domain"
+	"maestro/internal/executor/docker"
 	"maestro/internal/executor/fake"
 	"maestro/internal/handlers"
 	"maestro/internal/integration/jira"
 	"maestro/internal/jobResolver"
 	"maestro/internal/orchestrator"
 	FakeDB "maestro/internal/repository/fakeDB"
+	"maestro/internal/repository/memory"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 var ready bool
@@ -30,7 +34,7 @@ func main() {
 	path := filepath.Join(dir, "/config/jobTypes/")
 	jobs, err := config.LoadJobTypes(path)
 	// Cenario DemoMode para teste de job template valido
-	if cfg.DemoMode {
+	if cfg.Mode == "test" {
 		db := FakeDB.FakeJobDB{}
 		executor := fake.Fake{}
 		jiraReader := jira.FakeJiraReader{
@@ -52,9 +56,45 @@ func main() {
 			Addr:    ":8080",
 			Handler: handlers.LoggingMiddleware(mux),
 		}
-		log.Println("API subindo")
+		log.Println("API Up em Test")
 		log.Fatal(server.ListenAndServe())
 	}
+
+	if cfg.Mode == "load" {
+		db := memory.NewMemoryRepo(
+			&sync.Mutex{},
+			make(map[string]domain.Job),
+			make(map[string]domain.Task),
+		)
+		exe := docker.Docker{}
+		jiraReader := jira.FakeJiraReader{
+			Issue: jira.JiraIssue{
+				Fields: jira.JiraIssueFields{
+					Sistema:        jira.JiraCustomField{Value: "Sistema"},
+					Necessidade:    jira.JiraCustomField{Value: "Necessidade"},
+					JiraAttachment: []jira.JiraAttachment{{Filename: "NomeDoAnexo.csv"}},
+				},
+			},
+		}
+
+		sem := make(chan struct{}, cfg.API.ConcurrentJobs)
+		orch := orchestrator.NewJobOrchestrator(db, exe, "basedir", sem)
+		jobResolver := jobResolver.NewJobResolver(jiraReader, jobs, orch)
+		handler := handlers.NewHandler(*jobResolver, db)
+		queryHandler := handlers.NewQueryHandler(db)
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/jira-webhook", handler.HandleJiraWebhook)
+		mux.HandleFunc("/jobs", queryHandler.ListJobs)
+
+		server := http.Server{
+			Addr:    ":" + cfg.API.Port,
+			Handler: handlers.LoggingMiddleware(mux),
+		}
+		log.Println("API subindo em Load Mode")
+		log.Fatal(server.ListenAndServe())
+	}
+
 }
 
 /*
