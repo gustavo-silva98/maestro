@@ -99,6 +99,9 @@ func (m *Memory) elementIsPresent(id string) bool {
 }
 
 func (m *Memory) ListJobs(ctx context.Context) ([]domain.Job, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	result := make([]domain.Job, 0, len(m.jobs))
 	for _, val := range m.jobs {
 		result = append(result, val)
