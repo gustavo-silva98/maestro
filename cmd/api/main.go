@@ -38,9 +38,9 @@ func main() {
 	path := filepath.Join(dir, "config", "jobTypes")
 	jobs, err := config.LoadJobTypes(path)
 	// Cenario DemoMode para teste de job template valido
-	if cfg.Mode == "test" {
+	if cfg.Mode == "testApi" {
 		db := FakeDB.FakeJobDB{}
-		executor := fake.Fake{}
+		executor := fake.Fake{JobDurationSeconds: 60}
 		jiraReader := jira.FakeJiraReader{
 			Issue: jira.JiraIssue{
 				Fields: jira.JiraIssueFields{
