@@ -19,6 +19,10 @@ type JobRepository interface {
 	SetJobFailed(ctx context.Context, job domain.Job) error
 }
 
+type QueryData interface {
+	ListJobs(ctx context.Context) ([]domain.Job, error)
+}
+
 type TaskRepository interface {
 	CreateTask(ctx context.Context, task domain.Task) error
 }

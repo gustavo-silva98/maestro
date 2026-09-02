@@ -28,8 +28,8 @@ func (jr *JobResolver) GetJobInfo(issueId string) (jira.JiraIssue, error) {
 	return jr.jiraClient.GetIssue(issueId)
 }
 
-func (jr *JobResolver) ResolveJob(issue string) (config.JobType, error) {
-	issueJson, err := jr.GetJobInfo(issue)
+func (jr *JobResolver) ResolveJob(job *domain.Job) (config.JobType, error) {
+	issueJson, err := jr.GetJobInfo(job.IssueKey)
 	if err != nil {
 		return config.JobType{}, err
 	}
@@ -38,6 +38,7 @@ func (jr *JobResolver) ResolveJob(issue string) (config.JobType, error) {
 			if jt.JiraFields.Need == issueJson.Fields.Necessidade.Value {
 				for _, att := range issueJson.Fields.JiraAttachment {
 					if att.Filename == jt.JiraFields.AttachmentFilename {
+						job.InputFileId = att.ID
 						return jt, nil
 					}
 				}
@@ -48,14 +49,15 @@ func (jr *JobResolver) ResolveJob(issue string) (config.JobType, error) {
 }
 
 func (jr *JobResolver) DispatchJob(ctx context.Context, job domain.Job) error {
-	jobType, err := jr.ResolveJob(job.IssueKey)
+	jobType, err := jr.ResolveJob(&job)
 	if err != nil {
 		return fmt.Errorf("Erro ao achar tipo de job: %v", err)
 	}
+	inputBytes, err := jr.jiraClient.GetAttachmentContent(job.InputFileId)
+
 	job.Type = jobType.JobType
-	job.InputFile = jobType.JiraFields.AttachmentFilename
 	// Implementar a definição de ItemCount
 
-	_, err = jr.orch.ExecuteJob(ctx, job, jobType)
+	_, err = jr.orch.ExecuteJob(ctx, job, jobType, inputBytes)
 	return err
 }

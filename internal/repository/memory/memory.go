@@ -9,6 +9,7 @@ import (
 )
 
 var _ repository.JobTaskRepo = &Memory{}
+var _ repository.QueryData = &Memory{}
 
 type Memory struct {
 	mu    *sync.Mutex
@@ -95,4 +96,15 @@ func (m *Memory) elementIsPresent(id string) bool {
 		return true
 	}
 	return false
+}
+
+func (m *Memory) ListJobs(ctx context.Context) ([]domain.Job, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result := make([]domain.Job, 0, len(m.jobs))
+	for _, val := range m.jobs {
+		result = append(result, val)
+	}
+	return result, nil
 }

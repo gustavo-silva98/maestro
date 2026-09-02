@@ -1,8 +1,9 @@
-demoMode: true
+mode: dev
 api:
   name: Maestro
   namespace: maestro
   port: 8080
+  concurrentJobs: 50
 
 jira:
   name: JiraIntegration

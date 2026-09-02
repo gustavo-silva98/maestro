@@ -3,15 +3,18 @@ package main
 import (
 	"log"
 	"maestro/internal/config"
+	"maestro/internal/domain"
 	"maestro/internal/executor/fake"
 	"maestro/internal/handlers"
 	"maestro/internal/integration/jira"
 	"maestro/internal/jobResolver"
 	"maestro/internal/orchestrator"
 	FakeDB "maestro/internal/repository/fakeDB"
+	"maestro/internal/repository/memory"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 var ready bool
@@ -27,12 +30,16 @@ func main() {
 		log.Fatal(err)
 		return
 	}
-	path := filepath.Join(dir, "/config/jobTypes/")
+	if cfg.API.ConcurrentJobs <= 0 {
+		log.Fatalf("Concurrent Jobs deve ser maior que 0: %v", cfg.API.ConcurrentJobs)
+		return
+	}
+	path := filepath.Join(dir, "config", "jobTypes")
 	jobs, err := config.LoadJobTypes(path)
 	// Cenario DemoMode para teste de job template valido
-	if cfg.DemoMode {
+	if cfg.Mode == "testApi" {
 		db := FakeDB.FakeJobDB{}
-		executor := fake.Fake{}
+		executor := fake.Fake{JobDurationSeconds: 60}
 		jiraReader := jira.FakeJiraReader{
 			Issue: jira.JiraIssue{
 				Fields: jira.JiraIssueFields{
@@ -42,12 +49,8 @@ func main() {
 				},
 			},
 		}
-		orch := orchestrator.JobOrchestrator{
-			DB:       db,
-			Executor: executor,
-			BaseDir:  "basedir",
-		}
-		jobRes := jobResolver.NewJobResolver(jiraReader, jobs, &orch)
+		orch := orchestrator.NewJobOrchestrator(db, executor, dir, make(chan struct{}, cfg.API.ConcurrentJobs))
+		jobRes := jobResolver.NewJobResolver(jiraReader, jobs, orch)
 		h := handlers.NewHandler(*jobRes, db)
 		mux := http.NewServeMux()
 		mux.HandleFunc("/jira-webhook", h.HandleJiraWebhook)
@@ -56,9 +59,52 @@ func main() {
 			Addr:    ":8080",
 			Handler: handlers.LoggingMiddleware(mux),
 		}
-		log.Println("API subindo")
+		log.Println("API Up em Test")
 		log.Fatal(server.ListenAndServe())
 	}
+
+	if cfg.Mode == "dev" {
+		db := memory.NewMemoryRepo(
+			&sync.Mutex{},
+			make(map[string]domain.Job),
+			make(map[string]domain.Task),
+		)
+		exe := fake.Fake{}
+		inputPath := filepath.Join(dir, "scripts", "football", "input.csv")
+
+		inputBytes, err := os.ReadFile(inputPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		jiraReader := jira.FakeJiraReader{
+			Issue: jira.JiraIssue{
+				Fields: jira.JiraIssueFields{
+					Sistema:        jira.JiraCustomField{Value: "Transfermarket"},
+					Necessidade:    jira.JiraCustomField{Value: "Pesquisa"},
+					JiraAttachment: []jira.JiraAttachment{{ID: "FakeID", Filename: "Input.csv"}},
+				},
+			},
+			InputBytes: inputBytes,
+		}
+
+		sem := make(chan struct{}, cfg.API.ConcurrentJobs)
+		orch := orchestrator.NewJobOrchestrator(db, exe, dir, sem)
+		jobResolver := jobResolver.NewJobResolver(jiraReader, jobs, orch)
+		handler := handlers.NewHandler(*jobResolver, db)
+		queryHandler := handlers.NewQueryHandler(db)
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/jira-webhook", handler.HandleJiraWebhook)
+		mux.HandleFunc("/jobs", queryHandler.ListJobs)
+
+		server := http.Server{
+			Addr:    ":" + cfg.API.Port,
+			Handler: handlers.LoggingMiddleware(mux),
+		}
+		log.Println("API subindo em Load Mode")
+		log.Fatal(server.ListenAndServe())
+	}
+
 }
 
 /*

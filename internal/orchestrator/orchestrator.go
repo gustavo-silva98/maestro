@@ -8,23 +8,59 @@ import (
 	"maestro/internal/domain"
 	"maestro/internal/executor"
 	"maestro/internal/repository"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 type Orchestrator interface {
-	ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType) (domain.Job, error)
+	ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType, inputBytes []byte) (domain.Job, error)
 }
 
 type JobOrchestrator struct {
 	DB       repository.JobTaskRepo
 	Executor executor.Executor
 	BaseDir  string
+	sem      chan struct{} //Limitador de tasks concorrentes
 }
 
-func (jo *JobOrchestrator) ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType) (domain.Job, error) {
+func NewJobOrchestrator(db repository.JobTaskRepo, exe executor.Executor, dir string, sem chan struct{}) *JobOrchestrator {
+	return &JobOrchestrator{
+		DB:       db,
+		Executor: exe,
+		BaseDir:  dir,
+		sem:      sem,
+	}
+}
+
+func (jo *JobOrchestrator) ExecuteJob(ctx context.Context, job domain.Job, jt config.JobType, inputBytes []byte) (domain.Job, error) {
+	inputPath := filepath.Join(
+		jo.BaseDir,
+		jt.Container.ContainerDir,
+		"input-"+job.ID+".csv",
+	)
+	defer os.Remove(inputPath)
+
+	if err := os.MkdirAll(filepath.Dir(inputPath), 0755); err != nil {
+		return job, fmt.Errorf("erro ao criar diretório do input: %w", err)
+	}
+	if err := os.WriteFile(inputPath, inputBytes, 0644); err != nil {
+		return job, fmt.Errorf("erro ao salvar input: %w", err)
+	}
+
+	outputPath := filepath.Join(
+		jo.BaseDir,
+		jt.Container.ContainerDir,
+		"output-"+job.ID,
+	)
+	defer os.RemoveAll(outputPath)
+	if err := os.MkdirAll(outputPath, 0755); err != nil {
+		return job, fmt.Errorf("erro ao criar diretório de output: %w", err)
+	}
+
 	if err := jo.DB.SetJobPending(ctx, job); err != nil {
 		return job, fmt.Errorf("falha o setar job como pending: %v", err)
 	}
@@ -57,9 +93,12 @@ func buildVolumes(baseDir, scriptsDir, jobID string) (string, string) {
 }
 
 func (jo *JobOrchestrator) runTask(ctx context.Context, jobID string, jt config.JobType, itemCount int) (domain.Task, error) {
+	jo.sem <- struct{}{}
+	defer func() { <-jo.sem }()
+
 	inputFile, outputDir := buildVolumes(jo.BaseDir, jt.Container.ContainerDir, jobID)
 	createdDate := time.Now()
-	args := []string{"run", "--rm", "-v", inputFile, "-v", outputDir, jt.Container.ImageName}
+	args := []string{"run", "--rm", fmt.Sprintf("--memory=%v", jt.Container.Memory), fmt.Sprintf("--cpus=%v", jt.Container.Cpus), "-v", inputFile, "-v", outputDir, jt.Container.ImageName}
 	stdout, stderr, err := jo.Executor.Execute(ctx, "docker", args)
 
 	task := domain.Task{

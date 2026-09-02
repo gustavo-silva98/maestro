@@ -15,6 +15,7 @@ import (
 
 type JiraFieldReader interface {
 	GetIssue(issueId string) (JiraIssue, error)
+	GetAttachmentContent(attachmentId string) ([]byte, error)
 }
 
 type JiraIntegration struct {

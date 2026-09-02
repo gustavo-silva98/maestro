@@ -11,11 +11,12 @@ import (
 )
 
 type Config struct {
-	DemoMode bool `mapstructure:"demoMode"`
-	API      struct {
-		Name      string `mapstructure:"name"`
-		Namespace string `mapstructure:"namespace"`
-		Port      string `mapstructure:"port"`
+	Mode string `mapstructure:"mode"`
+	API  struct {
+		Name           string `mapstructure:"name"`
+		Namespace      string `mapstructure:"namespace"`
+		Port           string `mapstructure:"port"`
+		ConcurrentJobs int    `mapstructure:"concurrentJobs"`
 	} `mapstructure:"api"`
 	Jira struct {
 		Name          string `mapstructure:"name"`
@@ -48,6 +49,8 @@ type JobType struct {
 	Container struct {
 		ImageName    string `mapstructure:"imageName"`
 		ContainerDir string `mapstructure:"containerDir"`
+		Cpus         int    `mapstructure:"cpus"`
+		Memory       string `mapstructure:"memory"`
 	} `mapstructure:"container"`
 	Indicators struct {
 		TimerPerOp int `mapstructure:"timePerOp"`
@@ -56,10 +59,7 @@ type JobType struct {
 }
 
 func LoadConfig() (Config, error) {
-	err := godotenv.Load()
-	if err != nil {
-		return Config{}, fmt.Errorf("erro lendo config: %w", err)
-	}
+
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
@@ -74,6 +74,13 @@ func LoadConfig() (Config, error) {
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return Config{}, fmt.Errorf("erro parseando config: %w", err)
+	}
+	if cfg.Mode == "dev" {
+		return cfg, nil
+	}
+	err := godotenv.Load()
+	if err != nil {
+		return Config{}, fmt.Errorf("erro lendo .env: %w", err)
 	}
 	return cfg, nil
 }
