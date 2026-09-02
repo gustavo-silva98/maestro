@@ -4,7 +4,6 @@ import (
 	"log"
 	"maestro/internal/config"
 	"maestro/internal/domain"
-	"maestro/internal/executor/docker"
 	"maestro/internal/executor/fake"
 	"maestro/internal/handlers"
 	"maestro/internal/integration/jira"
@@ -64,13 +63,13 @@ func main() {
 		log.Fatal(server.ListenAndServe())
 	}
 
-	if cfg.Mode == "load" {
+	if cfg.Mode == "dev" {
 		db := memory.NewMemoryRepo(
 			&sync.Mutex{},
 			make(map[string]domain.Job),
 			make(map[string]domain.Task),
 		)
-		exe := docker.Docker{}
+		exe := fake.Fake{}
 		inputPath := filepath.Join(dir, "scripts", "football", "input.csv")
 
 		inputBytes, err := os.ReadFile(inputPath)

@@ -86,8 +86,8 @@ func (jo *JobOrchestrator) ExecuteJob(ctx context.Context, job domain.Job, jt co
 }
 
 func buildVolumes(baseDir, scriptsDir, jobID string) (string, string) {
-	inputFile := fmt.Sprintf("%s/%s/input-%s.csv:/app/input.csv", baseDir, scriptsDir, jobID)
-	outputDir := fmt.Sprintf("%s/%s/output-%s:/app/Prints", baseDir, scriptsDir, jobID)
+	inputFile := fmt.Sprintf("%s/%s/input-%s.csv:/app/input-%s.csv", baseDir, scriptsDir, jobID, jobID)
+	outputDir := fmt.Sprintf("%s/%s/output-%s:/app/output-%s", baseDir, scriptsDir, jobID, jobID)
 
 	return inputFile, outputDir
 }

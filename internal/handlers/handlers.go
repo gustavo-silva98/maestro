@@ -123,7 +123,7 @@ func (h *Handler) HandleJiraWebhook(w http.ResponseWriter, r *http.Request) {
 		if err := h.jr.DispatchJob(context.Background(), job); err != nil {
 			log.Printf("Falha ao validar job %v: %v", webhookBody.Issue.Key, err)
 		} else {
-			log.Printf("Job até agora deu bom")
+			log.Printf("Simulação Job criado OK!")
 		}
 	}()
 

@@ -59,10 +59,7 @@ type JobType struct {
 }
 
 func LoadConfig() (Config, error) {
-	err := godotenv.Load()
-	if err != nil {
-		return Config{}, fmt.Errorf("erro lendo config: %w", err)
-	}
+
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
@@ -77,6 +74,13 @@ func LoadConfig() (Config, error) {
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return Config{}, fmt.Errorf("erro parseando config: %w", err)
+	}
+	if cfg.Mode == "dev" {
+		return cfg, nil
+	}
+	err := godotenv.Load()
+	if err != nil {
+		return Config{}, fmt.Errorf("erro lendo .env: %w", err)
 	}
 	return cfg, nil
 }

@@ -65,7 +65,7 @@ COPY . .
 
 # Build static binary
 RUN --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    go build -ldflags="-s -w" -o /app/bin/server cmd/main.go
+    go build -ldflags="-s -w" -o /app/bin/server cmd/api/main.go
 
 # =============================================================================
 # 🚀 Release Stage
